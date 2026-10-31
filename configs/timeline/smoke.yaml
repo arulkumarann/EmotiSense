@@ -1,0 +1,20 @@
+# Offline check on the synthetic corpus with a tiny random encoder.
+_base_: base.yaml
+experiment: timeline_smoke
+data:
+  dataset: synthetic
+  manifest: data/processed/synthetic/manifest.csv
+  audio_root: data/raw/synthetic
+embeddings:
+  tiny: true
+  batch_size: 4
+model:
+  hidden: 32
+  layers: 1
+  heads: 4
+train:
+  epochs: 3
+  batch_size: 4
+  patience: 5
+deploy:
+  enabled: true

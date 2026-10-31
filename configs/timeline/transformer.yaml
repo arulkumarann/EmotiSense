@@ -1,0 +1,4 @@
+_base_: base.yaml
+experiment: timeline_transformer
+model:
+  kind: transformer

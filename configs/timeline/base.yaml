@@ -1,0 +1,52 @@
+# Timeline model: a sequence of per-turn embeddings -> per-turn intensities of
+# anger / frustration / happiness (satisfaction) / sadness / neutral (calm).
+# Targets are annotator-agreement fractions from IEMOCAP, so every fold has real labels.
+experiment: timeline_bilstm
+seed: 42
+output_dir: runs
+
+data:
+  dataset: iemocap
+  manifest: data/processed/iemocap/manifest.csv
+  audio_root: data/raw/IEMOCAP_full_release
+
+embeddings:
+  source: frozen                 # frozen = leak-free pretrained features; finetuned = trained SER checkpoints
+  encoder: microsoft/wavlm-large
+  tiny: false
+  ser_run: null                  # finetuned: run directory containing fold{k}/best.pt
+  cache_dir: data/cache
+  batch_size: 8
+
+model:
+  kind: bilstm                   # mlp | lstm | bilstm | transformer | transformer_causal
+  hidden: 256
+  layers: 2
+  heads: 4
+  dropout: 0.3
+
+train:
+  epochs: 120
+  batch_size: 8
+  lr: 1.0e-3
+  weight_decay: 0.01
+  crop_len: 48                   # random window of turns during training
+  ccc_weight: 0.5                # loss = ccc_weight * (1 - CCC) + (1 - ccc_weight) * MSE
+  grad_clip: 1.0
+  patience: 20
+  device: null
+
+escalation:
+  emotions: [anger, frustration]
+  alert_threshold: 0.6
+  rise_delta: 0.3
+  rise_window_s: 20.0
+  rise_floor: 0.35
+  smooth_window: 3
+
+deploy:
+  enabled: true                  # also train timeline_deploy.pt on sessions 1-4 (validated on 5)
+  ser_checkpoint: null           # required when embeddings.source = finetuned
+
+logging:
+  tensorboard: false

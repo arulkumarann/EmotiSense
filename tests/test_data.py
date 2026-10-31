@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -7,6 +9,7 @@ from emotisense.data.augment import energy_adaptive_mixup
 from emotisense.data.datasets import Collator, SERDataset
 from emotisense.data.iemocap import build_iemocap_manifest, parse_evaluation_file
 from emotisense.data.labels import INTENSITY_EMOTIONS, intensity_targets, scheme_targets
+from emotisense.data.manifest import resolve_audio_root
 from emotisense.data.ravdess import parse_ravdess_name
 from emotisense.data.splits import split_fold
 
@@ -92,6 +95,41 @@ def test_intensity_targets_range_and_columns(tmp_path):
 def test_iemocap_missing_root_message(tmp_path):
     with pytest.raises(FileNotFoundError, match="IEMOCAP_full_release"):
         build_iemocap_manifest(tmp_path / "nope")
+
+
+def test_iemocap_layout_is_discovered_anywhere(tmp_path):
+    """Labels and audio may live in unrelated folders (e.g. a flat Kaggle copy)."""
+    labels = tmp_path / "meta" / "EmoEvaluation"
+    labels.mkdir(parents=True)
+    audio = tmp_path / "all_wavs"
+    audio.mkdir()
+    (labels / "Ses01F_impro01.txt").write_text(EVAL_TEXT)
+    for utt in ("Ses01F_impro01_F000", "Ses01F_impro01_M001", "Ses01F_impro01_F002"):
+        sf.write(str(audio / f"{utt}.wav"), np.zeros(1600, dtype=np.float32), 16000)
+    df = build_iemocap_manifest(tmp_path)
+    assert len(df) == 3 and set(df["session"]) == {1}
+    assert df["path"].str.startswith("all_wavs/").all()
+
+
+def test_iemocap_without_labels_explains_itself(tmp_path):
+    (tmp_path / "wavs").mkdir()
+    sf.write(str(tmp_path / "wavs" / "Ses01F_impro01_F000.wav"), np.zeros(1600, dtype=np.float32), 16000)
+    with pytest.raises(FileNotFoundError, match="EmoEvaluation"):
+        build_iemocap_manifest(tmp_path)
+
+
+def test_audio_root_falls_back_to_recorded_meta(tmp_path):
+    real = tmp_path / "cache"
+    real.mkdir()
+    manifest = tmp_path / "proc" / "manifest.csv"
+    manifest.parent.mkdir()
+    (manifest.parent / "meta.json").write_text(json.dumps({"audio_root": str(real)}))
+    assert resolve_audio_root(None, manifest) == str(real)
+    assert resolve_audio_root(str(tmp_path / "missing"), manifest) == str(real)
+    other = tmp_path / "other"
+    other.mkdir()
+    assert resolve_audio_root(str(other), manifest) == str(other)      # an existing configured folder wins
+    assert resolve_audio_root(None, tmp_path / "nometa" / "m.csv") is None
 
 
 def test_ravdess_name_parser():

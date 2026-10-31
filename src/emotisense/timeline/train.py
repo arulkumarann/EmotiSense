@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 
 from ..config import Config, save_config
 from ..data.labels import INTENSITY_EMOTIONS
-from ..data.manifest import load_manifest, resolve_paths
+from ..data.manifest import load_manifest, resolve_audio_root, resolve_paths
 from ..data.splits import n_folds, split_fold
 from ..embedding import build_embedder, extract_embeddings
 from ..evaluation.metrics import regression_metrics
@@ -178,7 +178,8 @@ def run_timeline_cv(cfg: Config, run_dir: str | Path | None = None, folds: list[
     run_dir.mkdir(parents=True, exist_ok=True)
     save_config(cfg, run_dir / "config.yaml")
     log = get_logger("emotisense", run_dir / "run.log")
-    df = resolve_paths(load_manifest(cfg.data.manifest), cfg.data.get("audio_root"))
+    df = resolve_paths(load_manifest(cfg.data.manifest),
+                       resolve_audio_root(cfg.data.get("audio_root"), cfg.data.manifest))
     df = df.sort_values(["session", "dialog", "start"]).reset_index(drop=True)
     device = torch.device(cfg.train.get("device") or ("cuda" if torch.cuda.is_available() else "cpu"))
     esc = EscalationConfig.from_dict(cfg.get("escalation"))

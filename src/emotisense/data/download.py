@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import zipfile
 from pathlib import Path
 
@@ -10,15 +11,7 @@ from tqdm import tqdm
 
 from .ravdess import RAVDESS_MD5, RAVDESS_URL, RAVDESS_ZIP
 
-IEMOCAP_INSTRUCTIONS = """\
-IEMOCAP is licence-gated and cannot be downloaded automatically.
-
-  1. Request access (free for research): https://sail.usc.edu/iemocap/iemocap_release.htm
-  2. Extract the archive so that this folder exists:
-         data/raw/IEMOCAP_full_release/Session1 ... Session5
-  3. Build the manifest:
-         emotisense prepare iemocap --root data/raw/IEMOCAP_full_release
-"""
+KAGGLE_IEMOCAP = "ourbucket/iemocap-audio-complete"
 
 
 def md5sum(path: Path, chunk: int = 1 << 20) -> str:
@@ -70,3 +63,26 @@ def download_ravdess(raw_dir: str | Path = "data/raw") -> Path:
     archive.unlink()
     print(f"RAVDESS extracted to {target}")
     return target
+
+
+def download_iemocap(raw_dir: str | Path = "data/raw") -> Path:
+    """Fetch the public Kaggle copy of IEMOCAP with ``kagglehub`` and return its local folder.
+
+    The files are cached under ``<raw_dir>/kagglehub`` (unless KAGGLEHUB_CACHE is already set) so the
+    ~10 GB stay inside the project's git-ignored data directory. Re-running is a cheap no-op.
+    """
+    os.environ.setdefault("KAGGLEHUB_CACHE", str(Path(raw_dir).resolve() / "kagglehub"))
+    try:
+        import kagglehub
+    except ImportError as exc:
+        raise SystemExit("kagglehub is not installed. Run: pip install kagglehub") from exc
+    try:
+        path = Path(kagglehub.dataset_download(KAGGLE_IEMOCAP))
+    except Exception as exc:
+        raise SystemExit(
+            f"Could not download {KAGGLE_IEMOCAP} from Kaggle: {exc}\n"
+            "If Kaggle asks for credentials, create an API token at https://www.kaggle.com/settings and either "
+            "run `python -c \"import kagglehub; kagglehub.login()\"` or set KAGGLE_USERNAME and KAGGLE_KEY."
+        ) from exc
+    print(f"IEMOCAP available at {path}")
+    return path

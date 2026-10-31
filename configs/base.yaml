@@ -7,7 +7,7 @@ output_dir: runs
 data:
   dataset: iemocap                 # iemocap | ravdess | synthetic
   manifest: data/processed/iemocap/manifest.csv
-  audio_root: data/raw/IEMOCAP_full_release
+  audio_root: null                 # null = use the folder recorded by `emotisense download/prepare` (meta.json)
   scheme: iemocap4                 # iemocap4 | iemocap5 | ravdess8
   sample_rate: 16000
   train_max_seconds: 8.0           # random crop during training

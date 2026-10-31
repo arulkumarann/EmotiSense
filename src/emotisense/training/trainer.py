@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 from ..config import Config, save_config
 from ..data.datasets import Collator, SERDataset
 from ..data.labels import get_scheme
-from ..data.manifest import load_manifest, resolve_paths
+from ..data.manifest import load_manifest, resolve_audio_root, resolve_paths
 from ..data.splits import split_fold
 from ..evaluation.metrics import classification_metrics
 from ..losses import MultiLoss
@@ -284,4 +284,4 @@ class FoldTrainer:
 
 def load_dataframe(cfg: Config) -> pd.DataFrame:
     df = load_manifest(cfg.data.manifest)
-    return resolve_paths(df, cfg.data.get("audio_root"))
+    return resolve_paths(df, resolve_audio_root(cfg.data.get("audio_root"), cfg.data.manifest))

@@ -8,7 +8,7 @@ output_dir: runs
 data:
   dataset: iemocap
   manifest: data/processed/iemocap/manifest.csv
-  audio_root: data/raw/IEMOCAP_full_release
+  audio_root: null                 # null = use the folder recorded by `emotisense download/prepare`
 
 embeddings:
   source: frozen                 # frozen = leak-free pretrained features; finetuned = trained SER checkpoints

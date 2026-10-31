@@ -29,12 +29,21 @@ make smoke                             # offline end-to-end check in about a min
 
 ### Data
 
-| Dataset | Access | Command |
+| Dataset | Source | Command |
 |---|---|---|
-| **RAVDESS** (8 emotions, public) | automatic | `make data-ravdess` |
-| **IEMOCAP** (benchmark + timeline) | free licence request: https://sail.usc.edu/iemocap/ | extract to `data/raw/IEMOCAP_full_release`, then `make data-iemocap` |
+| **IEMOCAP** (benchmark + timeline) | public Kaggle copy `ourbucket/iemocap-audio-complete` via `kagglehub` | `make data-iemocap` |
+| **RAVDESS** (8 emotions) | public Zenodo archive, MD5-verified | `make data-ravdess` |
 
-`make data-iemocap` prints the size of the 4-class benchmark subset; it should be **5,531** utterances.
+`make data-iemocap` downloads IEMOCAP into `data/raw/kagglehub/` (about 10 GB, git-ignored), builds
+`data/processed/iemocap/manifest.csv`, records where the audio lives in `meta.json` (so no path configuration is
+needed) and prints the size of the 4-class benchmark subset, which should be **5,531** utterances.
+
+The builder finds the `EmoEvaluation/*.txt` label files and the audio anywhere under the downloaded folder and
+matches them by utterance id, so it does not depend on one particular directory layout. If Kaggle asks for
+credentials, create an API token at https://www.kaggle.com/settings, then run
+`python -c "import kagglehub; kagglehub.login()"` or set `KAGGLE_USERNAME` / `KAGGLE_KEY`.
+Already have your own copy? `python -m emotisense prepare iemocap --root /path/to/IEMOCAP_full_release`.
+It is a community copy of IEMOCAP; the original USC SAIL licence and citation requirements still apply.
 
 ### Train
 

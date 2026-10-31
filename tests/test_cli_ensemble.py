@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -65,6 +66,24 @@ def test_prepare_synthetic_and_doctor(tmp_path, monkeypatch, capsys):
     assert "Dataset synthetic" in out and "ready" in out
 
 
-def test_download_iemocap_prints_instructions(capsys):
+def test_download_iemocap_uses_kaggle_copy_and_records_root(tmp_path, monkeypatch, capsys):
+    from test_data import _fake_iemocap
+
+    import emotisense.data.download as dl
+
+    cache = tmp_path / "kaggle_cache"
+    _fake_iemocap(cache)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(dl, "download_iemocap", lambda raw_dir="data/raw": cache)
     assert main(["download", "iemocap"]) == 0
-    assert "sail.usc.edu" in capsys.readouterr().out
+    manifest = tmp_path / "data/processed/iemocap/manifest.csv"
+    assert manifest.exists() and len(pd.read_csv(manifest)) == 15
+    meta = json.loads((manifest.parent / "meta.json").read_text())
+    assert Path(meta["audio_root"]) == cache.resolve()
+    assert "iemocap4 benchmark subset" in capsys.readouterr().out
+
+
+def test_prepare_reports_missing_data_without_traceback(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    assert main(["prepare", "iemocap"]) == 1
+    assert "emotisense download iemocap" in capsys.readouterr().err

@@ -1,0 +1,12 @@
+# Analyzer defaults (also embedded in each timeline checkpoint; edit to retune live behaviour).
+vad:
+  margin_db: 12.0
+  min_speech_s: 0.3
+  merge_gap_s: 0.4
+  max_chunk_s: 6.0
+escalation:
+  emotions: [anger, frustration]
+  alert_threshold: 0.6
+  rise_delta: 0.3
+  rise_window_s: 20.0
+  smooth_window: 3

@@ -127,12 +127,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--folds", type=int, nargs="+", help="subset of folds (default: all)")
     p.add_argument("--run-dir", help="reuse/continue this run directory")
     p.add_argument("--resume", action="store_true", help="resume unfinished folds from last.pt")
-    p.add_argument("overrides", nargs="*", help="config overrides such as train.epochs=10")
+    p.add_argument("--set", dest="overrides", action="append", default=[], metavar="KEY=VALUE",
+                   help="config override, repeatable (e.g. --set train.epochs=10)")
     p.set_defaults(func=cmd_train)
 
     p = sub.add_parser("smoke", help="offline end-to-end check on synthetic data")
     p.add_argument("--run-dir")
-    p.add_argument("overrides", nargs="*")
+    p.add_argument("--set", dest="overrides", action="append", default=[], metavar="KEY=VALUE")
     p.set_defaults(func=cmd_smoke)
 
     _register_extra_commands(sub)

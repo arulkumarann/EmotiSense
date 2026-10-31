@@ -59,11 +59,17 @@ def build_loaders(cfg: Config, splits: dict[str, pd.DataFrame]):
     pin = torch.cuda.is_available()
     nw = int(t.get("num_workers", 4))
     kwargs = dict(num_workers=nw, pin_memory=pin, persistent_workers=nw > 0)
+
+    def by_length(ds: SERDataset) -> list[int]:
+        # Similar lengths per eval batch = minimal padding (matters for group-norm base models).
+        return sorted(range(len(ds)), key=lambda i: ds.df.at[i, "duration"])
     loaders = {
         "train": DataLoader(sets["train"], batch_size=t.batch_size, shuffle=True, drop_last=len(sets["train"]) > t.batch_size,
                             collate_fn=train_collate, **kwargs),
-        "val": DataLoader(sets["val"], batch_size=t.eval_batch_size, shuffle=False, collate_fn=eval_collate, **kwargs),
-        "test": DataLoader(sets["test"], batch_size=t.eval_batch_size, shuffle=False, collate_fn=eval_collate, **kwargs),
+        "val": DataLoader(sets["val"], batch_size=t.eval_batch_size, sampler=by_length(sets["val"]),
+                          collate_fn=eval_collate, **kwargs),
+        "test": DataLoader(sets["test"], batch_size=t.eval_batch_size, sampler=by_length(sets["test"]),
+                           collate_fn=eval_collate, **kwargs),
     }
     return sets, loaders
 

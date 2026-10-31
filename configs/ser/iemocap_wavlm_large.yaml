@@ -1,0 +1,4 @@
+# Base-paper recipe on IEMOCAP: WavLM + frame-level attention + KL/focal/center/SupCon + EAM.
+# 4 classes, 5-fold session-independent CV, reported as WA / UA.
+_base_: ../base.yaml
+experiment: iemocap_wavlm_large

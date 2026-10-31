@@ -1,0 +1,25 @@
+# Base-paper recipe plus EmotiSense improvements, aimed at beating its IEMOCAP numbers:
+#   * auxiliary valence/arousal/dominance regression (multi-task)
+#   * annotator vote distribution blended into the labels (mild soft labels)
+#   * weight EMA, layer-wise LR decay, SpecAugment-style time masking
+# These switches are unablated defaults; use `make ablate` to validate each one.
+_base_: ../base.yaml
+experiment: iemocap_wavlm_large_plus
+
+data:
+  soft_label_alpha: 0.3
+
+encoder:
+  spec_augment: true
+  mask_time_prob: 0.05
+
+loss:
+  weights: {kl: 1.0, focal: 1.0, center: 0.01, supcon: 0.1, vad: 0.5}
+
+train:
+  epochs: 40
+  ema_decay: 0.999
+  layerwise_lr_decay: 0.95
+  encoder_freeze_epochs: 1
+  schedule: {type: cosine, warmup_epochs: 2, min_factor: 0.02}
+  patience: 12

@@ -1,0 +1,12 @@
+# RAVDESS (8 emotions, 6-fold actor-independent CV). Fully public: `emotisense download ravdess`.
+_base_: ../base.yaml
+experiment: ravdess_wavlm_large
+
+data:
+  dataset: ravdess
+  manifest: data/processed/ravdess/manifest.csv
+  audio_root: data/raw/RAVDESS
+  scheme: ravdess8
+
+loss:
+  weights: {kl: 1.0, focal: 1.0, center: 0.01, supcon: 0.1, vad: 0.0}

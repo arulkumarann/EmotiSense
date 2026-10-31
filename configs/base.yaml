@@ -1,0 +1,74 @@
+# Shared defaults for every SER experiment. Experiment files inherit with `_base_: ../base.yaml`.
+experiment: base
+seed: 42
+deterministic: false
+output_dir: runs
+
+data:
+  dataset: iemocap                 # iemocap | ravdess | synthetic
+  manifest: data/processed/iemocap/manifest.csv
+  audio_root: data/raw/IEMOCAP_full_release
+  scheme: iemocap4                 # iemocap4 | iemocap5 | ravdess8
+  sample_rate: 16000
+  train_max_seconds: 8.0           # random crop during training
+  eval_max_seconds: 15.0           # centre crop at evaluation
+  normalize: true                  # per-utterance zero-mean / unit-variance (needed by WavLM-Large)
+  soft_label_alpha: 0.0            # 0 = hard consensus labels, 1 = annotator vote distribution
+  val_level: speaker               # held-out validation speaker (never the test set)
+
+encoder:
+  name: microsoft/wavlm-large
+  tiny: false                      # true = tiny random WavLM, offline smoke tests only
+  freeze_feature_extractor: true   # freeze the CNN front-end
+  layer_weighting: true            # learnable softmax-weighted sum of all hidden layers
+  gradient_checkpointing: false    # enable to fit WavLM-Large on small GPUs
+  layerdrop: 0.0
+  spec_augment: false
+  mask_time_prob: 0.05
+
+pool:
+  heads: 16
+  dropout: 0.1
+  head_hidden: 256
+  center_dim: 64
+  supcon_dim: 128
+
+loss:
+  weights: {kl: 1.0, focal: 1.0, center: 0.01, supcon: 0.1, vad: 0.0}
+  focal_gamma: 2.0
+  supcon_temperature: 0.1
+  supcon_max_frames: 32
+
+augment:
+  mixup_prob: 0.5                  # energy-adaptive mixup
+  snr_range: [-5.0, 10.0]
+  min_frac: 0.1
+  max_frac: 0.5
+
+train:
+  epochs: 30
+  batch_size: 16
+  eval_batch_size: 16
+  accum_steps: 1
+  num_workers: 4
+  precision: bf16                  # bf16 | fp16 | fp32 (CPU always runs fp32)
+  device: null                     # null = cuda if available
+  grad_clip: 5.0
+  lr_encoder: 2.0e-5
+  lr_head: 1.0e-4
+  lr_center: 5.0e-3
+  weight_decay: 0.01
+  layerwise_lr_decay: 1.0          # <1.0 shrinks the LR towards lower encoder layers
+  encoder_freeze_epochs: 0         # train only the heads for the first N epochs
+  schedule: {type: exp, gamma: 0.875, decay_epochs: 20, warmup_epochs: 1}   # exp = base-paper schedule
+  ema_decay: 0.0
+  monitor: ua                      # model selection metric on the validation speaker
+  patience: 10
+  log_every: 50
+  save_last: true                  # needed for --resume
+  keep_last: false                 # delete last.pt when a fold finishes
+  save_dtype: fp16                 # best.pt precision (halves checkpoint size)
+
+logging:
+  tensorboard: false
+  wandb: {enabled: false, project: emotisense, entity: null, group: null}

@@ -1,0 +1,12 @@
+# Fast, small-GPU variant (WavLM-Base+): useful to sanity-check the pipeline before the Large runs.
+_base_: ../base.yaml
+experiment: iemocap_wavlm_base
+
+encoder:
+  name: microsoft/wavlm-base-plus
+
+train:
+  epochs: 25
+  batch_size: 32
+  eval_batch_size: 32
+  lr_encoder: 5.0e-5

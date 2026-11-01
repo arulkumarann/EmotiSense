@@ -1,4 +1,4 @@
-"""EmotiSense: multi-emotion intelligence from customer call audio."""
+"""EmotiSense: second-by-second speech emotion timelines."""
 import warnings
 
 # Raised inside Hugging Face's WavLM attention on recent PyTorch; harmless and very noisy.

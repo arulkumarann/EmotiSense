@@ -2,7 +2,7 @@ PY ?= python
 IEMOCAP_ROOT ?= data/raw/IEMOCAP_full_release
 
 .PHONY: install install-app test smoke doctor data-ravdess data-iemocap prepare-iemocap dry-run \
-        train-paper train-plus train-frustration train-ravdess ablate timeline timeline-all dashboard
+        train-paper train-plus train-frustration train-ravdess ablate timeline timeline-all web web-install web-build web-dev web-test samples
 
 install:            ## core + dev dependencies
 	$(PY) -m pip install -e ".[dev]"
@@ -59,5 +59,20 @@ timeline-all:       ## the temporal-modelling comparison: no context vs BiLSTM v
 	$(PY) -m emotisense timeline --config configs/timeline/bilstm.yaml
 	$(PY) -m emotisense timeline --config configs/timeline/transformer.yaml
 
-dashboard:
-	$(PY) -m emotisense dashboard
+web-install:        ## install the web app's JavaScript dependencies (needs Node 18+)
+	cd web && npm install
+
+web-build:          ## build the React interface into web/dist
+	cd web && npm run build
+
+web:                ## run EmotiSense (local model + web app) at http://localhost:8000
+	$(PY) -m emotisense web --open
+
+web-dev:            ## UI hot-reload at http://localhost:5173 (run `make web` in another terminal for the API)
+	cd web && npm run dev
+
+web-test:           ## UI unit tests and type-check
+	cd web && npm run typecheck && npm test
+
+samples:            ## build local sample sessions from IEMOCAP with the trained model
+	$(PY) scripts/make_samples.py

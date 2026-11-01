@@ -1,22 +1,23 @@
 # EmotiSense
 
-Multi-emotion intelligence from customer-call audio. EmotiSense tracks how a caller feels moment by
-moment (anger, frustration, satisfaction, sadness, calm), flags escalation as it happens, and rolls the
-results up into agent and team analytics.
+Feel the shape of every voice. EmotiSense turns any recording (an interview, a meeting, a voice note, a
+conversation) into a second-by-second timeline of **anger, frustration, joy, sadness and calm**, synced to the audio,
+with tension alerts, notes, a searchable library and insights. It runs entirely on your own computer.
 
-It has two layers:
+It has three layers:
 
-1. **Speech emotion recognition (SER)**: a WavLM model trained and evaluated on IEMOCAP with exactly the
-   protocol of the base paper, so the numbers are directly comparable.
-   *Wang et al., "Multi-Loss Learning for Speech Emotion Recognition with Energy-Adaptive Mixup and
-   Frame-Level Attention", arXiv:2512.04551* reports **WA 78.47 / UA 79.14** on IEMOCAP (4 classes,
-   5-fold session-independent CV).
-2. **Conversation timeline**: a BiLSTM / Transformer over per-turn embeddings that outputs 0-1 intensity
-   curves across a whole call, plus an escalation detector, REST API and supervisor dashboard.
+1. **Speech emotion recognition (SER)**: a WavLM model trained and evaluated on IEMOCAP following the base paper's
+   protocol. *Wang et al., "Multi-Loss Learning for Speech Emotion Recognition with Energy-Adaptive Mixup and
+   Frame-Level Attention", arXiv:2512.04551* reports **WA 78.47 / UA 79.14** on the official IEMOCAP protocol
+   (4 classes, 5-fold session-independent CV).
+2. **Conversation timeline**: a BiLSTM / Transformer over per-passage embeddings that outputs 0-1 curves across a whole
+   recording, plus a tension detector.
+3. **Web app**: a React interface (landing page, drag-and-drop and microphone recording, an audio-synced timeline,
+   library, insights, live replay, settings) served by a local FastAPI backend.
 
-> **Status.** Verified on CPU with real data and real pretrained models: the test suite (83 tests), an offline smoke
+> **Status.** Verified on CPU with real data and real pretrained models: the test suite (Python and UI tests), an offline smoke
 > run, dry runs of WavLM-Base+ and **WavLM-Large** on real IEMOCAP and RAVDESS audio (loss, validation, checkpointing,
-> test evaluation, CV summary), the timeline stage on real dialogues, `analyze`, the REST API and the dashboard.
+> test evaluation, CV summary), the timeline stage on real dialogues, `analyze`, and the web app (backend tests plus a browser walk-through).
 > **Not done yet:** full-scale GPU training, so there are **no accuracy numbers**; see `make train-paper`.
 > Nothing in this repo claims a result that was not measured.
 
@@ -26,7 +27,7 @@ It has two layers:
 git clone https://github.com/arulkumarann/EmotiSense.git && cd EmotiSense
 pip install -e ".[dev,app,track]"      # install PyTorch for your CUDA version first if needed
 make doctor                            # GPU, dependencies, disk, dataset status
-make test                              # 83 tests, CPU only
+make test                              # Python tests, CPU only
 make smoke                             # offline end-to-end check in about a minute (no data needed)
 ```
 
@@ -88,29 +89,38 @@ WavLM-Large needs about 2.2 PFLOP per epoch on this data. Rough wall-clock for t
 about 1.5 h. These are estimates, not measurements: after the first fold of the first run, multiply that fold's time
 by the remaining folds to see where you really are.
 
-### Using the trained dashboard on your own PC
+### The web app
 
-After a training run, keep `timeline_deploy.pt` (BiLSTM, about 12 MB) in `models/`, then double-click `run_dashboard.bat`
-(Windows) or run `./run_dashboard.sh`. Your browser opens at http://localhost:8501: upload a `.wav` / `.flac` / `.ogg`
-call and the page plots anger, frustration, satisfaction, sadness and calm over time, marks escalation alerts and lists
-the moments to review. Any CPU works (about 40 s for a 2-minute call; the first run downloads WavLM-Large, 1.2 GB).
+Keep `timeline_deploy.pt` (BiLSTM, about 12 MB) in `models/`, then double-click **`run_app.bat`** (Windows) or run
+`./run_app.sh`. The first run builds the interface (needs Node 18+), then your browser opens at http://localhost:8000.
 
-The dashboard embeds audio with the *frozen* pretrained WavLM-Large and scores it with the BiLSTM; it does not use the
-fine-tuned classifier checkpoints (`best.pt`). Scores are indicative, not calibrated intensities, and agent and
-customer speech are not separated.
+- **Analyze:** drop in an audio file (WAV, MP3, OGG, FLAC, M4A, WEBM) or record with your microphone. Recordings are
+  converted to WAV in the browser; other formats are read directly (M4A and friends need `ffmpeg` on the server side, or
+  are converted in the browser automatically).
+- **Session view:** a glowing playhead glides over smooth emotion curves, a colour ribbon and the waveform while the
+  audio plays. Click or drag to jump, hover for exact values, add notes with `N`, export a report, CSV or JSON.
+- **Library, Insights, Live replay, Settings, Method:** search sessions, see the overall mix and tension trends,
+  replay several sessions side by side (clearly labelled as a simulation), tune alert sensitivity with a live preview,
+  and read the measured results. Dark and light themes.
 
-### Timeline, ensembling, serving
+```bash
+make samples        # optional: build three local sample sessions from IEMOCAP with your trained model
+make web-dev        # UI hot-reload on :5173 (run `make web` in another terminal for the API on :8000)
+make web-test       # UI type-check and unit tests
+```
+
+The app embeds audio with the *frozen* pretrained WavLM-Large and scores it with the BiLSTM; it does not use the
+fine-tuned classifier checkpoints (`best.pt`). Scores are indicative, not calibrated intensities, and speakers are not
+separated. Sample audio comes from IEMOCAP, whose licence forbids redistribution, so `data/samples/` is git-ignored.
+
+### Timeline and ensembling
 
 ```bash
 make timeline-all       # no-context MLP vs BiLSTM vs Transformer (answers the research question)
 python -m emotisense ensemble --runs runs/a/<ts> runs/b/<ts> --out runs/ens   # average several runs
 
-python -m emotisense analyze call.wav --timeline runs/timeline_bilstm/<ts>/timeline_deploy.pt --out result.json
-python -m emotisense serve     --timeline runs/timeline_bilstm/<ts>/timeline_deploy.pt   # REST API :8000
-python -m emotisense dashboard --timeline runs/timeline_bilstm/<ts>/timeline_deploy.pt   # Streamlit :8501
+python -m emotisense analyze recording.wav --timeline models/timeline_bilstm_deploy.pt --out result.json
 ```
-
-API: `POST /analyze` (multipart `file`, `agent`), `GET /calls`, `GET /calls/{id}`, `GET /agents`, `GET /health`.
 
 ## What each run produces
 
@@ -167,12 +177,13 @@ predicted timeline raises the same alert and trend as the annotated one.
 
 Escalation (`configs/timeline/base.yaml`): an alert fires when smoothed `max(anger, frustration)` crosses the
 threshold or rises by `rise_delta` within `rise_window_s`; the call trend is the fitted change over the call.
-The agent risk score (0.5 x mean negativity + 0.5 x escalation rate) is a heuristic, not a trained churn model.
+In the app these settings are adjustable on the Settings page, with a live preview.
 
 ## Repository layout
 
 ```
 configs/        base.yaml, ser/*.yaml, timeline/*.yaml, app/default.yaml
+web/            React + TypeScript interface (Vite); `npm run build` makes web/dist
 src/emotisense/
   data/         iemocap, ravdess, labels, splits, datasets, augment (EAM), download, synthetic
   models/       encoder (WavLM + layer weighting), pooling, ser
@@ -181,16 +192,17 @@ src/emotisense/
   evaluation/   WA/UA/CCC/RMSE/MAE, ensembling
   timeline/     timeline models, dialog data, escalation logic, CV training
   embedding.py  frozen / fine-tuned embedders shared by training and serving
-  app/          VAD, analyzer, SQLite store, FastAPI, Streamlit dashboard, plots
+  app/          energy VAD and the recording analyzer
+  web/          local backend: sessions, background jobs, audio streaming, notes, settings (FastAPI + SQLite)
   cli.py, cli_extra.py
-tests/          83 tests (CPU only, no downloads)
+tests/          Python tests (CPU only, no downloads); UI tests live in web/src
 Makefile        every common workflow as one command
 ```
 
 ## Honest limitations
 
 - The Kaggle copy has hard labels only and a different label set than the paper's protocol (see Data).
-- IEMOCAP is acted speech; behaviour on real call-centre audio is untested and needs your own labelled calls.
+- IEMOCAP is acted speech; behaviour on everyday recordings, accents and noisy rooms is untested.
 - Timeline labels are annotator agreement, not calibrated intensity.
 - The energy VAD is simple; swap in a neural VAD for noisy audio.
 - Base-size models (WavLM-Base+) use group norm in the CNN front-end, so padding slightly affects outputs;

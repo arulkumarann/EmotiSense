@@ -51,8 +51,7 @@ def test_ensemble_rejects_mismatched_runs(tmp_path):
 def test_parser_exposes_every_stage():
     parser = build_parser()
     sub = next(a for a in parser._actions if a.dest == "command")
-    assert {"doctor", "download", "prepare", "train", "smoke", "timeline", "ensemble", "analyze", "serve",
-            "dashboard"} <= set(sub.choices)
+    assert {"doctor", "download", "prepare", "train", "smoke", "timeline", "ensemble", "analyze", "web"} <= set(sub.choices)
     args = parser.parse_args(["train", "--config", "x.yaml", "--folds", "0", "2", "--set", "train.epochs=3",
                               "--set", "seed=1"])
     assert args.folds == [0, 2] and args.overrides == ["train.epochs=3", "seed=1"]

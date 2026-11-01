@@ -1,4 +1,4 @@
-# Call-centre variant: adds the "frustrated" class (IEMOCAP has it; most benchmarks drop it).
+# Five-class variant: adds the "frustrated" class (IEMOCAP has it; most benchmarks drop it).
 _base_: iemocap_wavlm_large_plus.yaml
 experiment: iemocap5_frustration
 

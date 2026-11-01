@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "emotisense"
 version = "0.1.0"
-description = "Multi-emotion intelligence from customer call audio: WavLM speech emotion recognition, conversation timelines and escalation alerts."
+description = "Second-by-second speech emotion timelines: WavLM emotion recognition, tension alerts and a local React web app."
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-app = ["fastapi>=0.109", "uvicorn>=0.27", "python-multipart>=0.0.9", "streamlit>=1.35", "plotly>=5.18"]
+app = ["fastapi>=0.109", "uvicorn>=0.27", "python-multipart>=0.0.9"]
 track = ["tensorboard>=2.14", "wandb>=0.16"]
 dev = ["pytest>=8.0", "httpx>=0.24"]
 

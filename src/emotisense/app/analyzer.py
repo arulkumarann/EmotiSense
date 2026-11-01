@@ -1,4 +1,4 @@
-"""CallAnalyzer: raw call audio -> emotion timeline, escalation alerts and summary."""
+"""CallAnalyzer: a recording -> emotion timeline, tension alerts and summary."""
 from __future__ import annotations
 
 from pathlib import Path

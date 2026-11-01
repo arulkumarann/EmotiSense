@@ -10,12 +10,10 @@ requests>=2.31
 kagglehub>=0.3
 tqdm>=4.65
 
-# Dashboard / API
+# Web app backend
 fastapi>=0.109
 uvicorn>=0.27
 python-multipart>=0.0.9
-streamlit>=1.35
-plotly>=5.18
 
 # Experiment tracking (optional)
 tensorboard>=2.14

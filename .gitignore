@@ -31,3 +31,11 @@ outputs/
 Thumbs.db
 
 results.tgz
+
+# Local demo audio derived from licensed IEMOCAP clips
+data/samples/
+
+# Web app
+web/node_modules/
+web/dist/
+*.tsbuildinfo

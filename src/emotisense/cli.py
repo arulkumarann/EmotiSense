@@ -64,13 +64,20 @@ def prepare_dataset(dataset: str, root: str, out: str):
     else:
         from .data.synthetic import build_synthetic_corpus
         df = build_synthetic_corpus(root, out)
-    save_json({"dataset": dataset, "audio_root": str(Path(root).resolve())}, Path(out).with_name("meta.json"))
+    source = df.attrs.get("label_source", "official")
+    save_json({"dataset": dataset, "audio_root": str(Path(root).resolve()), "label_source": source},
+              Path(out).with_name("meta.json"))
     print(f"Wrote {out}: {len(df)} utterances")
     print(df["label"].value_counts().to_string())
     if dataset == "iemocap":
         from .data.labels import scheme_targets
         keep, _, _ = scheme_targets(df, "iemocap4")
         print(f"iemocap4 benchmark subset: {int(keep.sum())} utterances (paper: 5,531)")
+        if source == "csv":
+            print("NOTE: these labels come from a hard-label CSV (no annotator votes, no valence/arousal). The 4-class "
+                  "subset differs from the paper's 5,531-utterance protocol, so results are NOT directly comparable to "
+                  "its 78.47 / 79.14; timeline targets become 0/1 per emotion. The official release (with "
+                  "EmoEvaluation files) is picked up automatically if you point --root at it.")
     return df
 
 
@@ -84,7 +91,8 @@ def cmd_download(args) -> int:
         from .data.download import download_iemocap
         root = download_iemocap(args.raw_dir)
         prepare_dataset("iemocap", str(root), DEFAULT_MANIFESTS["iemocap"][1])
-    print("Dataset ready. Next: `make train-paper` (or see the README).")
+    print("Dataset ready. Next: `make train-ravdess`" if args.dataset == "ravdess"
+          else "Dataset ready. Next: `make dry-run`, then `make train-paper`.")
     return 0
 
 

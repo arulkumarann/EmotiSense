@@ -111,6 +111,53 @@ def test_iemocap_layout_is_discovered_anywhere(tmp_path):
     assert df["path"].str.startswith("all_wavs/").all()
 
 
+def _fake_kaggle_iemocap(root, with_official_labels=False):
+    """Layout of the Kaggle copy: audio_files/SessionN/sentences/wav/<dialog>/<utt>.wav + training_data.csv."""
+    rows = []
+    for session in (1, 2, 3, 4, 5):
+        dialog = f"Ses0{session}F_impro01"
+        wav_dir = root / "audio_files" / f"Session{session}" / "sentences" / "wav" / dialog
+        wav_dir.mkdir(parents=True)
+        for utt, emotion in ((f"{dialog}_F000", "Neutral"), (f"{dialog}_M000", "Frustration"),
+                             (f"{dialog}_F001", "Excited"), (f"{dialog}_M001", "Anger")):
+            sf.write(str(wav_dir / f"{utt}.wav"), np.zeros(8000, dtype=np.float32), 16000)
+            rows.append({"file_id": utt, "emotion": emotion,
+                         "audio_path": f"/kaggle/working/audio_files/Session{session}/{utt}.wav"})
+    pd.DataFrame(rows).sample(frac=1.0, random_state=0).to_csv(root / "training_data.csv", index=False)
+    if with_official_labels:
+        d = root / "labels" / "EmoEvaluation"
+        d.mkdir(parents=True)
+        (d / "Ses01F_impro01.txt").write_text(EVAL_TEXT)
+
+
+def test_iemocap_kaggle_csv_layout(tmp_path):
+    _fake_kaggle_iemocap(tmp_path)
+    df = build_iemocap_manifest(tmp_path)
+    assert df.attrs["label_source"] == "csv" and len(df) == 20 and set(df["session"]) == {1, 2, 3, 4, 5}
+    first = df[df["dialog"] == "Ses01F_impro01"]
+    assert first["utt_id"].tolist() == ["Ses01F_impro01_F000", "Ses01F_impro01_M000",
+                                        "Ses01F_impro01_F001", "Ses01F_impro01_M001"]   # dialogue order
+    assert first["label"].tolist() == ["neu", "fru", "exc", "ang"]
+    assert first["start"].is_monotonic_increasing and first["start"].iloc[0] == 0.0
+    assert first["duration"].iloc[0] == pytest.approx(0.5)
+    assert first["speaker"].tolist() == ["1F", "1M", "1F", "1M"]
+    # One hard vote per utterance: soft labels equal the one-hot labels and the timeline targets are 0/1.
+    keep, hard, soft = scheme_targets(df, "iemocap5")
+    assert keep.all() and np.allclose(soft.sum(axis=1), 1.0) and set(np.unique(soft)) == {0.0, 1.0}
+    targets = intensity_targets(df)
+    assert targets.shape == (20, 5) and set(np.unique(targets)) <= {0.0, 1.0}
+    assert (targets.sum(axis=1) == 1).all()               # exactly one of the five emotions per utterance
+    assert "valence" not in df.columns                    # no VAD in this source: the aux task is masked out
+    ds = SERDataset(df.assign(path=[str(tmp_path / p) for p in df["path"]]), "iemocap4", max_seconds=1.0)
+    assert ds.vad_mask.sum() == 0 and len(ds) == 15       # frustration (5 rows) is outside iemocap4
+
+
+def test_official_labels_win_over_csv(tmp_path):
+    _fake_kaggle_iemocap(tmp_path, with_official_labels=True)
+    df = build_iemocap_manifest(tmp_path)
+    assert df.attrs["label_source"] == "official" and "valence" in df.columns
+
+
 def test_iemocap_without_labels_explains_itself(tmp_path):
     (tmp_path / "wavs").mkdir()
     sf.write(str(tmp_path / "wavs" / "Ses01F_impro01_F000.wav"), np.zeros(1600, dtype=np.float32), 16000)

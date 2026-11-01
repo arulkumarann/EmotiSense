@@ -1,10 +1,18 @@
-"""IEMOCAP: parse ``EmoEvaluation`` files into a manifest with votes and VAD scores.
+"""IEMOCAP: build the manifest from the public Kaggle copy or from the official release.
 
-The corpus is fetched from the public Kaggle copy ``ourbucket/iemocap-audio-complete``
-(``emotisense download iemocap``). The builder does not depend on the exact folder layout:
-it looks for ``EmoEvaluation/*.txt`` label files and for audio files anywhere under the
-given root, and matches them by utterance id (e.g. ``Ses01F_impro01_F000``). The original
-USC SAIL licence for IEMOCAP still applies to any use of the data.
+Two label sources are understood, found automatically anywhere under the dataset root:
+
+* ``EmoEvaluation/*.txt`` (official release): consensus label, every evaluator's vote and the
+  valence / arousal / dominance scores. Gives soft labels, a VAD auxiliary task, timeline
+  intensities and real utterance timestamps. Matches the 5,531-utterance protocol of the base paper.
+* ``training_data.csv`` (``file_id, emotion, audio_path``; the Kaggle copy
+  ``ourbucket/iemocap-audio-complete``): one hard label per utterance. Votes become one-hot, VAD is
+  absent and utterance times are reconstructed from durations in turn order. Its label set differs from
+  the official consensus (all 10,039 utterances are labelled), so scores are *not* directly comparable
+  to the paper.
+
+Audio is matched to labels by utterance id (e.g. ``Ses01F_impro01_F000``), so the folder layout
+does not matter. The original USC SAIL licence for IEMOCAP still applies to any use of the data.
 """
 from __future__ import annotations
 
@@ -12,6 +20,7 @@ import re
 from pathlib import Path
 
 import pandas as pd
+import soundfile as sf
 
 from .labels import IEMOCAP_CODES, IEMOCAP_WORD_TO_CODE
 from .manifest import save_manifest
@@ -24,6 +33,7 @@ _HEADER = re.compile(
 )
 _CATEGORICAL = re.compile(r"^C-\w+:\s*(?P<body>.*)$")
 _UTTERANCE = re.compile(r"^Ses(?P<session>\d{2})[FM]_")
+TURN_GAP_S = 0.3        # pause assumed between turns when timestamps must be reconstructed
 
 
 def parse_evaluation_file(path: str | Path) -> list[dict]:
@@ -82,23 +92,19 @@ def index_audio(root: Path) -> dict[str, Path]:
             if p.suffix.lower() in AUDIO_SUFFIXES and not p.name.startswith("._")}
 
 
-def build_iemocap_manifest(root: str | Path, out_path: str | Path | None = None) -> pd.DataFrame:
-    root = Path(root)
-    if not root.exists():
-        raise FileNotFoundError(
-            f"IEMOCAP folder not found: {root}. Run `emotisense download iemocap` (public Kaggle copy), "
-            "or pass --root pointing at an extracted IEMOCAP_full_release folder."
-        )
-    label_files = find_label_files(root)
-    if not label_files:
-        raise FileNotFoundError(
-            f"No IEMOCAP label files (*/EmoEvaluation/*.txt) found under {root}. The emotion labels are "
-            "required to build the benchmark; this copy of the dataset may not include them."
-        )
-    audio = index_audio(root)
-    if not audio:
-        raise FileNotFoundError(f"Label files were found under {root} but no audio files (.wav/.flac).")
+def find_label_csv(root: Path) -> Path | None:
+    """A CSV with ``file_id`` and ``emotion`` columns (the Kaggle copy's ``training_data.csv``)."""
+    for path in sorted(root.rglob("*.csv")):
+        try:
+            columns = set(pd.read_csv(path, nrows=0).columns)
+        except Exception:
+            continue
+        if {"file_id", "emotion"} <= columns:
+            return path
+    return None
 
+
+def _build_from_evaluations(root: Path, label_files: list[Path], audio: dict[str, Path]) -> pd.DataFrame:
     rows: list[dict] = []
     missing_audio = skipped = 0
     for fpath in label_files:
@@ -129,17 +135,88 @@ def build_iemocap_manifest(root: str | Path, out_path: str | Path | None = None)
                 **{f"v_{c}": round(v, 4) for c, v in rec["votes"].items()},
                 "valence": rec["val"], "arousal": rec["act"], "dominance": rec["dom"],
             })
+    if missing_audio:
+        print(f"[warn] {missing_audio} labelled utterances have no audio file and were skipped")
+    if skipped:
+        print(f"[warn] {skipped} label entries with unrecognised utterance ids were skipped")
     if not rows:
         raise RuntimeError(
             f"Found {len(label_files)} label files and {len(audio)} audio files under {root}, but no "
             "utterance id matched between them. Expected ids such as Ses01F_impro01_F000."
         )
+    return pd.DataFrame(rows)
+
+
+def _build_from_csv(root: Path, csv_path: Path, audio: dict[str, Path]) -> pd.DataFrame:
+    table = pd.read_csv(csv_path)
+    rows: list[dict] = []
+    missing_audio = skipped = 0
+    for utt, emotion in zip(table["file_id"].astype(str), table["emotion"].astype(str)):
+        code = IEMOCAP_WORD_TO_CODE.get(emotion.strip().lower())
+        match = _UTTERANCE.match(utt)
+        if code is None or match is None or "_" not in utt:
+            skipped += 1
+            continue
+        wav = audio.get(utt)
+        if wav is None:
+            missing_audio += 1
+            continue
+        dialog, turn = utt.rsplit("_", 1)
+        session = int(match["session"])
+        digits = re.sub(r"\D", "", turn)
+        rows.append({
+            "utt_id": utt,
+            "path": wav.relative_to(root).as_posix(),
+            "dataset": "iemocap",
+            "session": session,
+            "speaker": f"{session}{turn[0]}",
+            "dialog": dialog,
+            "turn": int(digits) if digits else 0,
+            "duration": round(sf.info(str(wav)).duration, 4),
+            "label": code,
+            "n_eval": 1,
+            **{f"v_{c}": float(c == code) for c in IEMOCAP_CODES},     # one hard vote
+        })
     if missing_audio:
         print(f"[warn] {missing_audio} labelled utterances have no audio file and were skipped")
     if skipped:
-        print(f"[warn] {skipped} label entries with unrecognised utterance ids were skipped")
-    df = pd.DataFrame(rows).sort_values(["session", "dialog", "start"]).reset_index(drop=True)
+        print(f"[warn] {skipped} CSV rows with unknown emotion or utterance id were skipped")
+    if not rows:
+        raise RuntimeError(f"{csv_path} is a label table, but none of its file_ids matched an audio file.")
+    df = pd.DataFrame(rows).sort_values(["session", "dialog", "turn", "speaker"]).reset_index(drop=True)
+    # No timestamps in this source: place turns back to back in dialogue order.
+    step = df["duration"] + TURN_GAP_S
+    df["start"] = (step.groupby(df["dialog"]).cumsum() - step).round(4)
+    df["end"] = (df["start"] + df["duration"]).round(4)
+    return df.drop(columns="turn")
+
+
+def build_iemocap_manifest(root: str | Path, out_path: str | Path | None = None) -> pd.DataFrame:
+    root = Path(root)
+    if not root.exists():
+        raise FileNotFoundError(
+            f"IEMOCAP folder not found: {root}. Run `emotisense download iemocap` (public Kaggle copy), "
+            "or pass --root pointing at an extracted IEMOCAP_full_release folder."
+        )
+    label_files = find_label_files(root)
+    csv_path = None if label_files else find_label_csv(root)
+    if not label_files and csv_path is None:
+        raise FileNotFoundError(
+            f"No IEMOCAP labels found under {root}: expected */EmoEvaluation/*.txt (official release) or a "
+            "CSV with file_id and emotion columns (Kaggle copy)."
+        )
+    audio = index_audio(root)
+    if not audio:
+        raise FileNotFoundError(f"Labels were found under {root} but no audio files (.wav/.flac).")
+    if label_files:
+        df = _build_from_evaluations(root, label_files, audio)
+        source = "official"
+    else:
+        df = _build_from_csv(root, csv_path, audio)
+        source = "csv"
+    df = df.sort_values(["session", "dialog", "start"]).reset_index(drop=True)
     df.attrs["root"] = str(root)
+    df.attrs["label_source"] = source
     if out_path is not None:
         save_manifest(df, out_path)
     return df

@@ -57,6 +57,28 @@ def cmd_serve(args) -> int:
     return 0
 
 
+def cmd_web(args) -> int:
+    import threading
+    import webbrowser
+
+    import uvicorn
+
+    from .web.server import build_analyzer_factory, create_web_app
+
+    static = Path(args.static)
+    app = create_web_app(analyzer_factory=build_analyzer_factory(args.timeline, args.ser), data_dir=args.data_dir,
+                         static_dir=static if static.is_dir() else None, samples_dir=args.samples)
+    url = f"http://{'localhost' if args.host in ('127.0.0.1', '0.0.0.0') else args.host}:{args.port}"
+    if not static.is_dir():
+        print(f"[note] {static} not found: the API runs at {url}/docs. Build the UI with `npm run build` in web/, "
+              "or use `npm run dev` for development.")
+    if args.open and static.is_dir():
+        threading.Timer(1.5, lambda: webbrowser.open(url)).start()
+    print(f"EmotiSense is running at {url}  (Ctrl+C to stop)")
+    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+    return 0
+
+
 def cmd_dashboard(args) -> int:
     import os
 
@@ -99,7 +121,18 @@ def register(sub) -> None:
     p.add_argument("--port", type=int, default=8000)
     p.set_defaults(func=cmd_serve)
 
-    p = sub.add_parser("dashboard", help="start the Streamlit supervisor dashboard")
+    p = sub.add_parser("web", help="start the EmotiSense web app (React UI + local model)")
+    p.add_argument("--timeline", default="models/timeline_bilstm_deploy.pt")
+    p.add_argument("--ser")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8000)
+    p.add_argument("--data-dir", default="outputs/web")
+    p.add_argument("--static", default="web/dist", help="built React app")
+    p.add_argument("--samples", default="data/samples")
+    p.add_argument("--open", action="store_true", help="open the browser when ready")
+    p.set_defaults(func=cmd_web)
+
+    p = sub.add_parser("dashboard", help="start the legacy Streamlit dashboard")
     p.add_argument("--timeline")
     p.add_argument("--ser")
     p.add_argument("--port", type=int, default=8501)

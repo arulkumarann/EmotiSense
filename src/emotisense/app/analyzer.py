@@ -14,6 +14,16 @@ from ..timeline.model import TimelineModel
 from .vad import VADConfig, chunk_segments, detect_speech
 
 
+def waveform_peaks(wave: np.ndarray, bins: int = 720) -> list[float]:
+    """Peak amplitude per bin, scaled to 0..1, for drawing a waveform without shipping the audio."""
+    if len(wave) == 0:
+        return [0.0] * bins
+    edges = np.linspace(0, len(wave), bins + 1).astype(int)
+    peaks = np.array([np.abs(wave[a:max(b, a + 1)]).max() for a, b in zip(edges[:-1], edges[1:])])
+    peak = peaks.max()
+    return [round(float(v), 3) for v in (peaks / peak if peak > 0 else peaks)]
+
+
 class CallAnalyzer:
     """Pipeline: resample -> energy VAD -> chunks -> embeddings -> timeline model -> escalation logic."""
 
@@ -46,7 +56,10 @@ class CallAnalyzer:
             wave = wave.mean(axis=-1)
         return resample(wave, sr or target, target)
 
-    def analyze(self, audio, sr: int | None = None, name: str | None = None) -> dict:
+    def analyze(self, audio, sr: int | None = None, name: str | None = None, progress=None) -> dict:
+        """``progress(stage, fraction, detail)`` is called as the analysis advances (for UIs)."""
+        report = progress or (lambda stage, fraction, detail="": None)
+        report("decode", 0.02, "Reading audio")
         wave = self._load(audio, sr)
         rate = self.embedder.sample_rate
         duration = len(wave) / rate
@@ -55,7 +68,9 @@ class CallAnalyzer:
             "duration": duration, "emotions": self.emotions,
             "display_names": {e: DISPLAY_NAMES.get(e, e) for e in self.emotions},
             "escalation_config": self.escalation.to_dict(),
+            "waveform": waveform_peaks(wave),
         }
+        report("speech", 0.08, "Finding speech")
         chunks = chunk_segments(detect_speech(wave, rate, self.vad), self.vad)
         if not chunks:
             result.update({"chunks": [], "scores": {e: [] for e in self.emotions}, "class_probs": None,
@@ -64,7 +79,16 @@ class CallAnalyzer:
             return result
 
         pieces = [wave[int(s * rate):int(e * rate)] for s, e in chunks]
-        emb, probs = self.embedder.embed(pieces)
+        parts, prob_parts = [], []
+        for lo in range(0, len(pieces), 8):
+            e, p = self.embedder.embed(pieces[lo:lo + 8])
+            parts.append(e)
+            prob_parts.append(p)
+            done = min(lo + 8, len(pieces))
+            report("listen", 0.1 + 0.8 * done / len(pieces), f"Listening, {done} of {len(pieces)} passages")
+        emb = torch.cat(parts)
+        probs = torch.cat(prob_parts) if prob_parts[0] is not None else None
+        report("timeline", 0.93, "Tracing the timeline")
         with torch.no_grad():
             x = emb.unsqueeze(0).to(self.device)
             scores = self.model(x, torch.ones(1, len(chunks), dtype=torch.bool, device=self.device))[0].cpu().numpy()

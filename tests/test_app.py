@@ -166,3 +166,15 @@ def test_dashboard_renders_a_saved_result(tmp_path):
     labels = [m.label for m in at.metric]
     assert labels == ["Overall negativity", "Peak score", "Peak time", "Trend"]
     assert at.metric[3].value == "Escalating"
+
+
+def test_analyzer_reports_progress_and_waveform(deploy_checkpoint, tmp_path):
+    make_call(tmp_path / "c.wav")
+    analyzer = CallAnalyzer(deploy_checkpoint, device="cpu")
+    seen = []
+    result = analyzer.analyze(tmp_path / "c.wav", progress=lambda stage, fraction, detail="": seen.append((stage, fraction)))
+    stages = [s for s, _ in seen]
+    assert stages[0] == "decode" and "listen" in stages and stages[-1] == "timeline"
+    fractions = [f for _, f in seen]
+    assert fractions == sorted(fractions) and 0 < fractions[0] < fractions[-1] < 1
+    assert len(result["waveform"]) == 720 and max(result["waveform"]) == 1.0 and min(result["waveform"]) >= 0.0

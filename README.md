@@ -14,7 +14,7 @@ It has two layers:
 2. **Conversation timeline**: a BiLSTM / Transformer over per-turn embeddings that outputs 0-1 intensity
    curves across a whole call, plus an escalation detector, REST API and supervisor dashboard.
 
-> **Status.** Verified on CPU with real data and real pretrained models: the test suite (78 tests), an offline smoke
+> **Status.** Verified on CPU with real data and real pretrained models: the test suite (83 tests), an offline smoke
 > run, dry runs of WavLM-Base+ and **WavLM-Large** on real IEMOCAP and RAVDESS audio (loss, validation, checkpointing,
 > test evaluation, CV summary), the timeline stage on real dialogues, `analyze`, the REST API and the dashboard.
 > **Not done yet:** full-scale GPU training, so there are **no accuracy numbers**; see `make train-paper`.
@@ -26,7 +26,7 @@ It has two layers:
 git clone https://github.com/arulkumarann/EmotiSense.git && cd EmotiSense
 pip install -e ".[dev,app,track]"      # install PyTorch for your CUDA version first if needed
 make doctor                            # GPU, dependencies, disk, dataset status
-make test                              # 78 tests, CPU only
+make test                              # 83 tests, CPU only
 make smoke                             # offline end-to-end check in about a minute (no data needed)
 ```
 
@@ -76,6 +76,17 @@ python -m emotisense train --config configs/ser/iemocap_wavlm_large.yaml \
 
 Runs are resumable: if a job is interrupted, re-run with `--run-dir runs/<experiment>/<timestamp> --resume`.
 Finished folds are skipped automatically.
+
+### Renting a GPU on a budget
+
+`bash scripts/run_all.sh` does everything in priority order (checks, data, pre-flight, then the main 5-fold run, the
+timeline models and the baseline) and writes `results.tgz`. Run it inside `tmux`. Re-running resumes finished folds.
+Batches are length-bucketed (`train.bucket_by_length`), which measured **47% less padded compute** on IEMOCAP.
+
+WavLM-Large needs about 2.2 PFLOP per epoch on this data. Rough wall-clock for the whole script (setup about 20 min,
+12-epoch cap) is about 2.5 h on one A100 80GB, so about $4.5 at $1.79/h; skip the baseline with `SKIP_BASELINE=1` for
+about 1.5 h. These are estimates, not measurements: after the first fold of the first run, multiply that fold's time
+by the remaining folds to see where you really are.
 
 ### Timeline, ensembling, serving
 
@@ -161,7 +172,7 @@ src/emotisense/
   embedding.py  frozen / fine-tuned embedders shared by training and serving
   app/          VAD, analyzer, SQLite store, FastAPI, Streamlit dashboard, plots
   cli.py, cli_extra.py
-tests/          78 tests (CPU only, no downloads)
+tests/          83 tests (CPU only, no downloads)
 Makefile        every common workflow as one command
 ```
 

@@ -107,6 +107,10 @@ class FoldTrainer:
         self.classes = get_scheme(cfg.data.scheme)["classes"]
         masks = split_fold(df, cfg.data.dataset, fold, level=cfg.data.get("val_level", "speaker"))
         self.splits = {name: df[m].reset_index(drop=True) for name, m in masks.items()}
+        limit = cfg.data.get("limit_per_split")       # dry runs: a fixed random sample of every split
+        if limit:
+            self.splits = {k: v.sample(n=min(int(limit), len(v)), random_state=0).reset_index(drop=True)
+                           for k, v in self.splits.items()}
         self.log.info("Fold %d | train=%d val=%d test=%d utterances", fold,
                       *(len(self.splits[s]) for s in ("train", "val", "test")))
 

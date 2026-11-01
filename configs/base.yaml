@@ -15,6 +15,7 @@ data:
   normalize: true                  # per-utterance zero-mean / unit-variance (needed by WavLM-Large)
   soft_label_alpha: 0.0            # 0 = hard consensus labels, 1 = annotator vote distribution
   val_level: speaker               # held-out validation speaker (never the test set)
+  limit_per_split: null            # dry runs only: random sample of N utterances per split
 
 encoder:
   name: microsoft/wavlm-large

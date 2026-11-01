@@ -99,3 +99,10 @@ def test_missing_manifest_gives_actionable_error(tmp_path):
     cfg = load_config("configs/ser/smoke.yaml", [f"data.manifest={tmp_path.as_posix()}/nope.csv"])
     with pytest.raises(FileNotFoundError, match="emotisense prepare"):
         cv_module.load_dataframe(cfg)
+
+
+def test_limit_per_split_caps_every_split(smoke_cfg, tmp_path):
+    smoke_cfg.data.limit_per_split = 5
+    df = trainer_module.load_dataframe(smoke_cfg)
+    trainer = FoldTrainer(smoke_cfg, df, 0, tmp_path / "limited")
+    assert all(0 < len(v) <= 5 for v in trainer.splits.values())

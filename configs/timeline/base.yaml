@@ -9,6 +9,7 @@ data:
   dataset: iemocap
   manifest: data/processed/iemocap/manifest.csv
   audio_root: null                 # null = use the folder recorded by `emotisense download/prepare`
+  limit_dialogs_per_session: null  # dry runs only: first N dialogs of each session
 
 embeddings:
   source: frozen                 # frozen = leak-free pretrained features; finetuned = trained SER checkpoints

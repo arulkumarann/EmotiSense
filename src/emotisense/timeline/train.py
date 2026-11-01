@@ -111,7 +111,7 @@ def fit_timeline(cfg: Config, train_dialogs, val_dialogs, in_dim: int, device: t
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), t.get("grad_clip", 1.0))
             opt.step()
-            running += float(loss)
+            running += float(loss.detach())
         sched.step()
         val_loss, val_ccc = _evaluate_loss(model, val_loader, device, t.ccc_weight)
         if logger:
@@ -172,6 +172,14 @@ def save_timeline_checkpoint(path: Path, model: TimelineModel, cfg: Config, in_d
     }, path)
 
 
+def limit_dialogs(df: pd.DataFrame, per_session: int | None) -> pd.DataFrame:
+    """Dry runs: keep only the first ``per_session`` dialogs of every session (``None`` keeps everything)."""
+    if not per_session:
+        return df
+    keep = df.drop_duplicates(["session", "dialog"]).groupby("session").head(int(per_session))["dialog"]
+    return df[df["dialog"].isin(keep)].reset_index(drop=True)
+
+
 def run_timeline_cv(cfg: Config, run_dir: str | Path | None = None, folds: list[int] | None = None) -> dict:
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     run_dir = Path(run_dir) if run_dir else Path(cfg.get("output_dir", "runs")) / cfg.experiment / stamp
@@ -181,6 +189,7 @@ def run_timeline_cv(cfg: Config, run_dir: str | Path | None = None, folds: list[
     df = resolve_paths(load_manifest(cfg.data.manifest),
                        resolve_audio_root(cfg.data.get("audio_root"), cfg.data.manifest))
     df = df.sort_values(["session", "dialog", "start"]).reset_index(drop=True)
+    df = limit_dialogs(df, cfg.data.get("limit_dialogs_per_session"))
     device = torch.device(cfg.train.get("device") or ("cuda" if torch.cuda.is_available() else "cpu"))
     esc = EscalationConfig.from_dict(cfg.get("escalation"))
     folds = folds if folds is not None else list(range(n_folds(cfg.data.dataset)))

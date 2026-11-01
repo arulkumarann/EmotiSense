@@ -167,3 +167,12 @@ def test_timeline_cv_end_to_end(synthetic_corpus, tmp_path):
     assert list((tmp_path / "cache").glob("frozen_*.pt"))                    # embeddings were cached
     for key in ("alert_f1", "trend_accuracy"):
         assert 0.0 <= summary[key]["mean"] <= 1.0
+
+
+def test_limit_dialogs_keeps_first_n_per_session(synthetic_corpus):
+    from emotisense.timeline.train import limit_dialogs
+
+    _, df = synthetic_corpus
+    limited = limit_dialogs(df, 1)
+    assert limited.groupby("session")["dialog"].nunique().eq(1).all() and len(limited) < len(df)
+    assert limit_dialogs(df, None) is df

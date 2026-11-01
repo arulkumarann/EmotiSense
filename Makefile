@@ -1,7 +1,7 @@
 PY ?= python
 IEMOCAP_ROOT ?= data/raw/IEMOCAP_full_release
 
-.PHONY: install install-app test smoke doctor data-ravdess data-iemocap prepare-iemocap \
+.PHONY: install install-app test smoke doctor data-ravdess data-iemocap prepare-iemocap dry-run \
         train-paper train-plus train-frustration train-ravdess ablate timeline timeline-all dashboard
 
 install:            ## core + dev dependencies
@@ -27,6 +27,9 @@ data-iemocap:       ## download the public Kaggle copy of IEMOCAP and build its 
 
 prepare-iemocap:    ## build the manifest from your own extracted copy (IEMOCAP_ROOT=...)
 	$(PY) -m emotisense prepare iemocap --root $(IEMOCAP_ROOT)
+
+dry-run:            ## 2-minute pre-flight on real IEMOCAP: tiny sample, 1 epoch, 1 fold (needs `make data-iemocap`)
+	$(PY) -m emotisense train --config configs/ser/iemocap_wavlm_base.yaml --folds 0 --set experiment=dry_run --set data.limit_per_split=64 --set train.epochs=1 --set train.num_workers=0
 
 train-paper:        ## base-paper recipe, IEMOCAP 4-class, 5-fold CV
 	$(PY) -m emotisense train --config configs/ser/iemocap_wavlm_large.yaml

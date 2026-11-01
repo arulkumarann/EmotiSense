@@ -14,9 +14,11 @@ It has two layers:
 2. **Conversation timeline**: a BiLSTM / Transformer over per-turn embeddings that outputs 0-1 intensity
    curves across a whole call, plus an escalation detector, REST API and supervisor dashboard.
 
-> **Status:** the full pipeline is implemented and unit-tested (CPU, tiny model, synthetic data, plus a
-> real WavLM-Base+ forward check). The WavLM-Large IEMOCAP numbers have **not been produced yet**; run
-> `make train-paper` on a GPU to get them. Nothing in this repo claims a result that was not measured.
+> **Status.** Verified on CPU with real data and real pretrained models: the test suite (78 tests), an offline smoke
+> run, dry runs of WavLM-Base+ and **WavLM-Large** on real IEMOCAP and RAVDESS audio (loss, validation, checkpointing,
+> test evaluation, CV summary), the timeline stage on real dialogues, `analyze`, the REST API and the dashboard.
+> **Not done yet:** full-scale GPU training, so there are **no accuracy numbers**; see `make train-paper`.
+> Nothing in this repo claims a result that was not measured.
 
 ## Quick start (any GPU machine)
 
@@ -24,6 +26,7 @@ It has two layers:
 git clone https://github.com/arulkumarann/EmotiSense.git && cd EmotiSense
 pip install -e ".[dev,app,track]"      # install PyTorch for your CUDA version first if needed
 make doctor                            # GPU, dependencies, disk, dataset status
+make test                              # 78 tests, CPU only
 make smoke                             # offline end-to-end check in about a minute (no data needed)
 ```
 
@@ -31,23 +34,33 @@ make smoke                             # offline end-to-end check in about a min
 
 | Dataset | Source | Command |
 |---|---|---|
-| **IEMOCAP** (benchmark + timeline) | public Kaggle copy `ourbucket/iemocap-audio-complete` via `kagglehub` | `make data-iemocap` |
+| **IEMOCAP** (benchmark + timeline) | public Kaggle copy `ourbucket/iemocap-audio-complete` via `kagglehub` (1.4 GB) | `make data-iemocap` |
 | **RAVDESS** (8 emotions) | public Zenodo archive, MD5-verified | `make data-ravdess` |
 
-`make data-iemocap` downloads IEMOCAP into `data/raw/kagglehub/` (about 10 GB, git-ignored), builds
-`data/processed/iemocap/manifest.csv`, records where the audio lives in `meta.json` (so no path configuration is
-needed) and prints the size of the 4-class benchmark subset, which should be **5,531** utterances.
+`make data-iemocap` downloads the audio, builds `data/processed/iemocap/manifest.csv` and records where the audio
+lives in `meta.json`, so no path configuration is needed. Set `KAGGLEHUB_CACHE=/some/disk` first to choose where the
+download goes (default: `data/raw/kagglehub/`). If Kaggle asks for credentials, create an API token at
+https://www.kaggle.com/settings and run `python -c "import kagglehub; kagglehub.login()"`.
 
-The builder finds the `EmoEvaluation/*.txt` label files and the audio anywhere under the downloaded folder and
-matches them by utterance id, so it does not depend on one particular directory layout. If Kaggle asks for
-credentials, create an API token at https://www.kaggle.com/settings, then run
-`python -c "import kagglehub; kagglehub.login()"` or set `KAGGLE_USERNAME` / `KAGGLE_KEY`.
-Already have your own copy? `python -m emotisense prepare iemocap --root /path/to/IEMOCAP_full_release`.
-It is a community copy of IEMOCAP; the original USC SAIL licence and citation requirements still apply.
+**What this copy contains, and what it means.** 10,039 utterances (5 sessions, 10 speakers, 151 dialogues) and one
+`training_data.csv` with a single hard label per utterance. There are no annotator votes, no valence/arousal/dominance
+and no timestamps (turn times are reconstructed from durations in dialogue order). Its labels also differ from the
+official consensus: every utterance is labelled, so the 4-class subset has **7,536 utterances instead of the paper's
+5,531**. Consequences:
+
+- Scores on this copy are **not directly comparable** to the paper's 78.47 / 79.14. `prepare` prints a note saying so.
+- Soft labels (`data.soft_label_alpha`) and the valence/arousal auxiliary loss have nothing to work with and are inert.
+- Timeline targets are 0/1 per emotion rather than annotator-agreement fractions.
+
+For the exact paper protocol, point the loader at the official IEMOCAP release (free licence request at
+https://sail.usc.edu/iemocap/): `python -m emotisense prepare iemocap --root /path/to/IEMOCAP_full_release`. It detects
+the `EmoEvaluation` files automatically and switches on votes, VAD and real timestamps; nothing else changes.
+The original USC SAIL licence and citation requirements apply to either copy.
 
 ### Train
 
 ```bash
+make dry-run            # 2-minute pre-flight on real IEMOCAP: 64-utterance sample, 1 epoch, 1 fold
 make train-paper        # base-paper recipe, IEMOCAP 4-class, 5-fold CV
 make train-plus         # + valence/arousal aux task, soft labels, EMA, layer-wise LR, SpecAugment
 make train-frustration  # 5-class variant that includes "frustrated"
@@ -112,14 +125,16 @@ configs choose a documented default.
 
 ### Protocol (matches the paper)
 
-IEMOCAP, 4 classes (neutral, happy+excited, angry, sad), 5,531 utterances, 5-fold session-independent CV
+IEMOCAP, 4 classes (neutral, happy+excited, angry, sad), 5-fold session-independent CV (5,531 utterances in the
+official release; 7,536 in the Kaggle copy, see Data)
 (fold *k* tests on session *k+1*). The paper does not describe validation, so a **held-out speaker from the
 training sessions** is used for model selection; the test session is never used for early stopping or
 checkpoint choice. Report mean +/- std over folds (`summary.md`).
 
 ## The timeline layer
 
-Targets are annotator-agreement intensities from IEMOCAP's per-evaluator votes for **anger, frustration,
+With the official release, targets are annotator-agreement intensities from IEMOCAP's per-evaluator votes (0/1 with the
+Kaggle copy) for **anger, frustration,
 happiness (shown as satisfaction), sadness, neutral (shown as calm)**. Confusion is not modelled: no public
 dataset labels it. Dialogues are split by session, so both speakers of a conversation stay together.
 
@@ -146,12 +161,13 @@ src/emotisense/
   embedding.py  frozen / fine-tuned embedders shared by training and serving
   app/          VAD, analyzer, SQLite store, FastAPI, Streamlit dashboard, plots
   cli.py, cli_extra.py
-tests/          70 tests (CPU only, no downloads)
+tests/          78 tests (CPU only, no downloads)
 Makefile        every common workflow as one command
 ```
 
 ## Honest limitations
 
+- The Kaggle copy has hard labels only and a different label set than the paper's protocol (see Data).
 - IEMOCAP is acted speech; behaviour on real call-centre audio is untested and needs your own labelled calls.
 - Timeline labels are annotator agreement, not calibrated intensity.
 - The energy VAD is simple; swap in a neural VAD for noisy audio.

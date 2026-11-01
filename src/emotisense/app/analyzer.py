@@ -31,21 +31,42 @@ class CallAnalyzer:
                  device: str | None = None, vad: VADConfig | dict | None = None,
                  escalation: EscalationConfig | dict | None = None, embedder=None):
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
-        ckpt = torch.load(timeline_checkpoint, map_location="cpu")
-        mc = ckpt["model_cfg"]
-        self.model = TimelineModel(ckpt["in_dim"], len(ckpt["emotions"]), mc["kind"], mc["hidden"],
-                                   mc["layers"], mc["heads"], mc["dropout"]).to(self.device)
-        self.model.load_state_dict(ckpt["model"])
-        self.model.eval()
-        self.emotions: list[str] = list(ckpt["emotions"])
-        spec = dict(ckpt["embedder"])
-        if ser_checkpoint is not None and spec["kind"] == "finetuned":
-            spec["checkpoint"] = str(ser_checkpoint)
-        self.embedder = embedder or build_embedder(spec, str(self.device))
         self.vad = vad if isinstance(vad, VADConfig) else VADConfig.from_dict(vad)
-        self.escalation = (escalation if isinstance(escalation, EscalationConfig)
-                           else EscalationConfig.from_dict(escalation or ckpt.get("escalation")))
-        self.timeline_name = str(timeline_checkpoint)
+        self._escalation_override = escalation
+        self._ser_checkpoint = ser_checkpoint
+        self._injected_embedder = embedder is not None
+        self.embedder = embedder
+        self.embedder_spec: dict | None = None
+        self.use_timeline(timeline_checkpoint)
+
+    def use_timeline(self, checkpoint: str | Path) -> None:
+        """Switch to another timeline checkpoint.
+
+        Timeline models that share an encoder (all of ours use the frozen WavLM-Large) reuse the already-loaded encoder,
+        so switching only swaps a small head and is nearly instant. Nothing is changed if loading fails.
+        """
+        ckpt = torch.load(checkpoint, map_location="cpu")
+        mc = ckpt["model_cfg"]
+        model = TimelineModel(ckpt["in_dim"], len(ckpt["emotions"]), mc["kind"], mc["hidden"],
+                              mc["layers"], mc["heads"], mc["dropout"]).to(self.device)
+        model.load_state_dict(ckpt["model"])
+        model.eval()
+        spec = dict(ckpt["embedder"])
+        if self._ser_checkpoint is not None and spec["kind"] == "finetuned":
+            spec["checkpoint"] = str(self._ser_checkpoint)
+        embedder = self.embedder
+        if not self._injected_embedder and (embedder is None or spec != self.embedder_spec):
+            embedder = build_embedder(spec, str(self.device))
+        override = self._escalation_override
+        escalation = (override if isinstance(override, EscalationConfig)
+                      else EscalationConfig.from_dict(override or ckpt.get("escalation")))
+        # commit only after everything loaded
+        self.model, self.embedder, self.embedder_spec = model, embedder, spec
+        self.emotions = list(ckpt["emotions"])
+        self.escalation = escalation
+        self.timeline_name = str(checkpoint)
+        self.timeline_id = Path(checkpoint).stem
+        self.timeline_kind = mc["kind"]
 
     def _load(self, audio, sr: int | None) -> np.ndarray:
         target = self.embedder.sample_rate
@@ -68,6 +89,7 @@ class CallAnalyzer:
             "duration": duration, "emotions": self.emotions,
             "display_names": {e: DISPLAY_NAMES.get(e, e) for e in self.emotions},
             "escalation_config": self.escalation.to_dict(),
+            "model": {"id": self.timeline_id, "kind": self.timeline_kind},
             "waveform": waveform_peaks(wave),
         }
         report("speech", 0.08, "Finding speech")

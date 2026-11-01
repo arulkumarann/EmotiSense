@@ -69,6 +69,17 @@ class SessionStore:
                              "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (k, json.dumps(v)))
         return self.get_settings()
 
+    def get_meta(self, key: str, default=None):
+        """Free-form preferences such as the selected model (kept apart from the alert settings)."""
+        with self._conn() as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key = ?", (f"meta:{key}",)).fetchone()
+        return json.loads(row["value"]) if row else default
+
+    def set_meta(self, key: str, value) -> None:
+        with self._conn() as conn:
+            conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) "
+                         "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (f"meta:{key}", json.dumps(value)))
+
     def escalation_config(self) -> EscalationConfig:
         return EscalationConfig.from_dict(self.get_settings())
 

@@ -5,10 +5,13 @@ import time
 import numpy as np
 import pytest
 import soundfile as sf
+import torch
 from fastapi.testclient import TestClient
 
 from emotisense.app.analyzer import waveform_peaks
 from emotisense.data.audio import UnsupportedAudio, load_audio, probe_duration
+from emotisense.timeline.model import TimelineModel
+from emotisense.web.registry import ModelRegistry
 from emotisense.web.server import create_web_app, seed_samples
 from emotisense.web.store import SessionStore
 
@@ -268,3 +271,110 @@ def test_static_app_is_served_with_spa_fallback(tmp_path):
         assert c.get("/assets/main.js").text == "console.log(1)"
         assert c.get("/api/nothing").status_code == 404
         assert "top secret" not in c.get("/..%2fsecret.txt").text and "top secret" not in c.get("/../secret.txt").text
+
+
+# ------------------------------------------------------------------- models
+def write_timeline_ckpt(path, kind="bilstm", val_ccc=0.5, encoder="microsoft/wavlm-large"):
+    model = TimelineModel(16, 5, kind, 8, 1, 2, 0.1)
+    torch.save({"model": model.state_dict(), "in_dim": 16, "emotions": EMOTIONS, "fold": "deploy",
+                "model_cfg": {"kind": kind, "hidden": 8, "layers": 1, "heads": 2, "dropout": 0.1},
+                "embedder": {"kind": "frozen", "encoder": encoder, "tiny": False}, "escalation": {}, "val_ccc": val_ccc}, path)
+    return path
+
+
+class SwitchingAnalyzer(FakeAnalyzer):
+    """Records which timeline model it was asked to use, like the real analyzer does."""
+
+    def __init__(self, timeline_id):
+        super().__init__()
+        self.timeline_id, self.switched = timeline_id, []
+
+    def use_timeline(self, path):
+        self.switched.append(path.stem)
+        self.timeline_id = path.stem
+
+
+@pytest.fixture()
+def models_dir(tmp_path):
+    d = tmp_path / "models"
+    d.mkdir()
+    write_timeline_ckpt(d / "timeline_mlp_deploy.pt", "mlp", 0.49)
+    write_timeline_ckpt(d / "timeline_bilstm_deploy.pt", "bilstm", 0.59)
+    write_timeline_ckpt(d / "timeline_transformer_deploy.pt", "transformer", 0.58)
+    (d / "notes.pt").write_bytes(b"not a checkpoint")                      # ignored without error
+    torch.save({"something": "else"}, d / "other.pt")                       # a checkpoint of some other kind
+    return d
+
+
+def test_registry_finds_only_timeline_models_in_a_stable_order(models_dir):
+    reg = ModelRegistry(models_dir)
+    assert [e.kind for e in reg.timeline_models()] == ["bilstm", "transformer", "mlp"]
+    assert reg.get("timeline_mlp_deploy").params > 0 and reg.get("nope") is None and reg.get(None) is None
+    assert reg.default_id() == "timeline_bilstm_deploy" and reg.default_id("timeline_mlp_deploy") == "timeline_mlp_deploy"
+    assert reg.default_id("missing") == "timeline_bilstm_deploy"
+    assert ModelRegistry(None).timeline_models() == [] and ModelRegistry(models_dir / "absent").default_id() is None
+    extra = write_timeline_ckpt(models_dir.parent / "elsewhere.pt", "lstm")
+    assert len(ModelRegistry(models_dir, extra_paths=(extra, models_dir / "timeline_mlp_deploy.pt")).timeline_models()) == 4
+
+
+def test_models_api_describes_everything_for_the_ui(models_dir, tmp_path):
+    ser = tmp_path / "ser"
+    ser.mkdir()
+    (ser / "plus_fold0_best.pt").write_bytes(b"x" * 2_000_000)
+    app = create_web_app(analyzer=FakeAnalyzer(), data_dir=tmp_path / "d", samples_dir=None,
+                         registry=ModelRegistry(models_dir, ser_dirs=(ser, tmp_path / "missing")),
+                         default_model="timeline_bilstm_deploy")
+    with TestClient(app) as c:
+        body = c.get("/api/models").json()
+        assert body["active"] == "timeline_bilstm_deploy"
+        assert [m["kind"] for m in body["timeline"]] == ["bilstm", "transformer", "mlp"]
+        bilstm = body["timeline"][0]
+        assert bilstm["active"] and bilstm["selectable"] and bilstm["stats"]["ccc"]["mean"] == pytest.approx(0.5129)
+        assert set(bilstm["stats"]["per_emotion_ccc"]) == set(EMOTIONS)
+        assert bilstm["strengths"] and bilstm["limits"] and bilstm["params"] > 0 and bilstm["file"].endswith(".pt")
+        assert not any(m["active"] for m in body["timeline"][1:])
+        assert body["encoder"]["name"] == "WavLM-Large" and not body["encoder"]["selectable"]
+        clf = body["classifier"]
+        assert clf["available"] and clf["files"] == [{"file": "plus_fold0_best.pt", "fold": 1, "size_mb": 2}]
+        assert len(clf["stats"]["folds"]) == 5 and clf["stats"]["mean"]["ua"] == pytest.approx(67.41)
+        assert {g["term"] for g in body["glossary"]} >= {"CCC", "Alert F1"} and body["supported"] and body["data_note"]
+    with TestClient(create_web_app(analyzer=FakeAnalyzer(), data_dir=tmp_path / "e", samples_dir=None)) as c:
+        empty = c.get("/api/models").json()
+        assert empty["timeline"] == [] and empty["active"] is None and not empty["classifier"]["available"]
+
+
+def test_active_model_can_be_changed_and_is_remembered(models_dir, tmp_path):
+    def build():
+        return create_web_app(analyzer=FakeAnalyzer(), data_dir=tmp_path / "d", samples_dir=None,
+                              registry=ModelRegistry(models_dir), default_model="timeline_bilstm_deploy")
+    with TestClient(build()) as c:
+        assert c.put("/api/models/active", json={"id": "timeline_mlp_deploy"}).json() == {"active": "timeline_mlp_deploy"}
+        assert c.get("/api/models").json()["active"] == "timeline_mlp_deploy"
+        assert c.put("/api/models/active", json={"id": "bogus"}).status_code == 422
+        assert c.put("/api/models/active", json={}).status_code == 422
+        assert c.get("/api/models").json()["active"] == "timeline_mlp_deploy"        # a bad request changes nothing
+    with TestClient(build()) as c:                                                       # "restart"
+        assert c.get("/api/models").json()["active"] == "timeline_mlp_deploy"
+    (models_dir / "timeline_mlp_deploy.pt").unlink()
+    with TestClient(build()) as c:                                                       # remembered model was removed
+        assert c.get("/api/models").json()["active"] == "timeline_bilstm_deploy"
+
+
+def test_analysis_uses_the_requested_model(models_dir, tmp_path):
+    analyzer = SwitchingAnalyzer("timeline_bilstm_deploy")
+    app = create_web_app(analyzer=analyzer, data_dir=tmp_path / "d", samples_dir=None,
+                         registry=ModelRegistry(models_dir), default_model="timeline_bilstm_deploy")
+    with TestClient(app) as c:
+        audio = write_audio(tmp_path / "a.wav", 5.0)
+        assert wait_for(c, upload(c, audio).json()["job_id"])["status"] == "done"
+        assert analyzer.switched == []                                                   # default is already loaded
+        job = wait_for(c, upload(c, audio, model="timeline_transformer_deploy").json()["job_id"])
+        assert job["status"] == "done" and analyzer.switched == ["timeline_transformer_deploy"]
+        c.put("/api/models/active", json={"id": "timeline_mlp_deploy"})
+        wait_for(c, upload(c, audio).json()["job_id"])                                   # no explicit model: the saved default
+        assert analyzer.switched[-1] == "timeline_mlp_deploy"
+        wait_for(c, upload(c, audio, model="timeline_mlp_deploy").json()["job_id"])
+        assert analyzer.switched.count("timeline_mlp_deploy") == 1                       # already loaded: no needless reload
+        bad = upload(c, audio, model="nope")
+        assert bad.status_code == 422 and "Unknown model" in bad.json()["detail"]
+        assert c.get("/api/health").json()["timeline_model"] == "timeline_mlp_deploy"

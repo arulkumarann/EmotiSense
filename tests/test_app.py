@@ -8,6 +8,7 @@ import torch
 from emotisense.app.analyzer import CallAnalyzer
 from emotisense.app.vad import VADConfig, chunk_segments, detect_speech
 from emotisense.config import load_config
+from emotisense.timeline.model import TimelineModel
 from emotisense.timeline.train import run_timeline_cv
 
 SR = 16000
@@ -91,3 +92,27 @@ def test_analyzer_reports_progress_and_waveform(deploy_checkpoint, tmp_path):
     fractions = [f for _, f in seen]
     assert fractions == sorted(fractions) and 0 < fractions[0] < fractions[-1] < 1
     assert len(result["waveform"]) == 720 and max(result["waveform"]) == 1.0 and min(result["waveform"]) >= 0.0
+
+
+def test_analyzer_switches_timeline_model_without_reloading_the_encoder(deploy_checkpoint, tmp_path):
+    ckpt = torch.load(deploy_checkpoint, map_location="cpu")
+    mlp = TimelineModel(ckpt["in_dim"], 5, "mlp", 16, 1, 4, 0.1)
+    other = tmp_path / "timeline_mlp_x.pt"
+    torch.save({**ckpt, "model": mlp.state_dict(),
+                "model_cfg": {"kind": "mlp", "hidden": 16, "layers": 1, "heads": 4, "dropout": 0.1}}, other)
+    analyzer = CallAnalyzer(deploy_checkpoint, device="cpu")
+    encoder = analyzer.embedder
+    assert analyzer.timeline_kind != "mlp"
+
+    analyzer.use_timeline(other)
+    assert (analyzer.timeline_kind, analyzer.timeline_id) == ("mlp", "timeline_mlp_x")
+    assert analyzer.embedder is encoder                      # same frozen encoder: nothing heavy was reloaded
+    make_call(tmp_path / "c.wav")
+    result = analyzer.analyze(tmp_path / "c.wav")
+    assert result["model"] == {"id": "timeline_mlp_x", "kind": "mlp"} and result["chunks"]
+
+    broken = tmp_path / "broken.pt"
+    broken.write_bytes(b"this is not a checkpoint")
+    with pytest.raises(Exception):
+        analyzer.use_timeline(broken)
+    assert analyzer.timeline_id == "timeline_mlp_x" and analyzer.analyze(tmp_path / "c.wav")["chunks"]   # still works

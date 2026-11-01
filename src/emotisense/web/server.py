@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 
 from ..data.audio import probe_duration
 from .jobs import JobManager
+from .registry import ModelRegistry
 from .store import DEFAULT_SETTINGS, SessionStore, new_id
 
 ALLOWED_SUFFIXES = {".wav", ".mp3", ".ogg", ".oga", ".opus", ".flac", ".m4a", ".aac", ".webm", ".mp4", ".wma"}
@@ -84,12 +85,18 @@ def seed_samples(store: SessionStore, samples_dir: Path) -> int:
 
 def create_web_app(analyzer=None, analyzer_factory=None, data_dir: str | Path = "outputs/web",
                    static_dir: str | Path | None = None, samples_dir: str | Path | None = "data/samples",
-                   dev_cors: bool = True) -> FastAPI:
+                   dev_cors: bool = True, registry: ModelRegistry | None = None,
+                   default_model: str | None = None) -> FastAPI:
     """``analyzer`` (ready) or ``analyzer_factory`` (loaded in a background thread) provides ``analyze``."""
     data_dir = Path(data_dir)
     audio_dir = data_dir / "audio"
     audio_dir.mkdir(parents=True, exist_ok=True)
     store = SessionStore(data_dir / "sessions.sqlite")
+    registry = registry or ModelRegistry(None)       # no model folder: analyses use whatever the analyzer was built with
+
+    def active_model_id() -> str | None:
+        preferred = store.get_meta("active_model")
+        return preferred if registry.get(preferred) else registry.default_id(default_model)
     jobs = JobManager()
     state = {"analyzer": analyzer, "error": None}
     ready = threading.Event()
@@ -128,15 +135,21 @@ def create_web_app(analyzer=None, analyzer_factory=None, data_dir: str | Path = 
     # ----------------------------------------------------------------- health
     @app.get("/api/health")
     def health():
+        current = getattr(state["analyzer"], "timeline_id", None)
         return {"status": "ok", "model": model_status(), "model_error": state["error"], "version": "0.2.0",
+                "timeline_model": current,
                 "formats": sorted(s.lstrip(".") for s in ALLOWED_SUFFIXES)}
 
     # --------------------------------------------------------------- sessions
     @app.post("/api/sessions", status_code=202)
-    async def create_session(file: UploadFile = File(...), title: str = Form(""), tag: str = Form("")):
+    async def create_session(file: UploadFile = File(...), title: str = Form(""), tag: str = Form(""),
+                             model: str = Form("")):
         suffix = Path(file.filename or "").suffix.lower()
         if suffix not in ALLOWED_SUFFIXES:
             raise HTTPException(415, f"Unsupported file type {suffix or '(none)'}. Use wav, mp3, ogg, flac, m4a or webm.")
+        wanted = registry.get(model or active_model_id())
+        if model and wanted is None:
+            raise HTTPException(422, f"Unknown model {model!r}. See /api/models for the available ones.")
         sid = new_id()
         dest = audio_dir / f"{sid}{suffix}"
         size = 0
@@ -165,6 +178,9 @@ def create_web_app(analyzer=None, analyzer_factory=None, data_dir: str | Path = 
                 model = state["analyzer"]
                 if model is None:
                     raise RuntimeError(state["error"] or "The model is not available")
+                if wanted is not None and hasattr(model, "use_timeline") and getattr(model, "timeline_id", None) != wanted.id:
+                    progress("model", 0.03, f"Switching to the {wanted.kind} model")
+                    model.use_timeline(wanted.path)       # shares the loaded encoder, so this is near-instant
                 result = model.analyze(str(dest), name=file.filename, progress=progress)
                 if not result["chunks"]:
                     raise RuntimeError("No speech was found in this recording")
@@ -235,6 +251,20 @@ def create_web_app(analyzer=None, analyzer_factory=None, data_dir: str | Path = 
         if not store.delete_note(note_id):
             raise HTTPException(404, "Note not found")
         return {"ok": True}
+
+    # ----------------------------------------------------------------- models
+    @app.get("/api/models")
+    def list_models():
+        return registry.describe(active_model_id())
+
+    @app.put("/api/models/active")
+    async def set_active_model(request: Request):
+        body = await request.json()
+        entry = registry.get(str(body.get("id", "")))
+        if entry is None:
+            raise HTTPException(422, "Unknown model")
+        store.set_meta("active_model", entry.id)
+        return {"active": entry.id}
 
     # --------------------------------------------------------------- settings
     @app.get("/api/settings")

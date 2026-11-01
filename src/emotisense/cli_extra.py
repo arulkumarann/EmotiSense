@@ -1,6 +1,7 @@
 """Timeline, analysis, ensembling and serving commands (registered onto the main CLI)."""
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 
@@ -47,11 +48,15 @@ def cmd_web(args) -> int:
 
     import uvicorn
 
+    from .web.registry import ModelRegistry
     from .web.server import build_analyzer_factory, create_web_app
 
     static = Path(args.static)
+    ser_dirs = tuple(d for d in (args.ser_dir, os.environ.get("EMOTISENSE_SER_DIR"), "models/ser_finetuned") if d)
+    registry = ModelRegistry(args.models_dir, extra_paths=(args.timeline,), ser_dirs=ser_dirs)
     app = create_web_app(analyzer_factory=build_analyzer_factory(args.timeline, args.ser), data_dir=args.data_dir,
-                         static_dir=static if static.is_dir() else None, samples_dir=args.samples)
+                         static_dir=static if static.is_dir() else None, samples_dir=args.samples,
+                         registry=registry, default_model=Path(args.timeline).stem)
     url = f"http://{'localhost' if args.host in ('127.0.0.1', '0.0.0.0') else args.host}:{args.port}"
     if not static.is_dir():
         print(f"[note] {static} not found: the API runs at {url}/docs. Build the UI with `npm run build` in web/, "
@@ -88,7 +93,9 @@ def register(sub) -> None:
     p.set_defaults(func=cmd_analyze)
 
     p = sub.add_parser("web", help="start the EmotiSense web app (React UI + local model)")
-    p.add_argument("--timeline", default="models/timeline_bilstm_deploy.pt")
+    p.add_argument("--timeline", default="models/timeline_bilstm_deploy.pt", help="timeline model loaded at start")
+    p.add_argument("--models-dir", default="models", help="folder scanned for timeline models (the Models page)")
+    p.add_argument("--ser-dir", help="folder with fine-tuned classifier checkpoints (shown on the Models page)")
     p.add_argument("--ser")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8000)

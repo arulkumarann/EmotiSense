@@ -1,0 +1,92 @@
+/* ───────────────────────── Model picker (dropdown) ───────────────────────── */
+.picker { position: relative; display: inline-block; z-index: 15; }
+.picker-btn { display: inline-flex; align-items: center; gap: 0.8rem; height: 48px; padding: 0 1rem 0 1.1rem; border-radius: 16px; text-align: left; transition: border-color 0.3s, transform 0.4s var(--ease), box-shadow 0.4s var(--ease); }
+.picker-btn:hover, .picker-btn.open { border-color: var(--accent-2); transform: translateY(-2px); }
+.picker-btn.open { box-shadow: var(--shadow-card), 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent); }
+.picker-btn b { font-weight: 600; font-size: 15px; }
+.picker-btn .eyebrow { font-size: 9.5px; }
+.picker-score { font-size: 11px; color: var(--accent-2); padding: 3px 8px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.picker-btn[disabled] { opacity: 0.55; pointer-events: none; }
+.picker-pop { position: absolute; top: calc(100% + 10px); left: 0; width: min(430px, calc(100vw - 2.5rem)); padding: 0.45rem; display: grid; gap: 0.1rem; background: var(--surface-solid); box-shadow: var(--shadow-pop); transform-origin: top left; border-radius: 20px; }
+.picker-opt { display: grid; grid-template-columns: minmax(0, 1fr) auto 22px; gap: 0.8rem; align-items: center; padding: 0.75rem 0.85rem; border-radius: 14px; text-align: left; transition: background-color 0.25s; }
+.picker-opt.cursor { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.picker-opt-main { display: grid; gap: 0.1rem; min-width: 0; }
+.picker-opt-main b { font-weight: 600; }
+.picker-opt-meta { display: grid; justify-items: end; font-size: 10.5px; color: var(--muted); gap: 0.15rem; }
+.picker-opt-meta span:first-child { color: var(--accent-2); }
+.picker-check { color: var(--accent-2); display: grid; place-items: center; }
+.picker-check svg { width: 17px; height: 17px; }
+.picker-foot { display: block; padding: 0.7rem 0.85rem 0.55rem; border-top: 1px solid var(--line); margin-top: 0.3rem; color: var(--text-2); transition: color 0.3s; }
+.picker-foot:hover { color: var(--accent-2); }
+.model-bar { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+.model-bar .muted { max-width: 52ch; }
+
+/* ───────────────────────── Models page ───────────────────────── */
+.flow { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.9rem; margin-bottom: 1rem; position: relative; }
+.flow-step { padding: 1rem 1.1rem; display: grid; gap: 0.25rem; align-content: start; }
+.flow-step b { font-family: var(--font-display); font-weight: 400; font-size: 1.35rem; line-height: 1.1; }
+.flow-step { position: relative; }
+.flow-step:not(:last-child)::after { content: "92"; position: absolute; top: 50%; right: -0.9rem; transform: translate(50%, -50%); color: var(--accent-2); font-size: 15px; z-index: 2; pointer-events: none; }
+.flow-step.hot { border-color: color-mix(in srgb, var(--accent-2) 55%, transparent); box-shadow: var(--shadow-card), 0 0 40px color-mix(in srgb, var(--accent) 22%, transparent); }
+.m-section { margin-top: 3.6rem; }
+.m-head { display: grid; gap: 0.5rem; margin-bottom: 1.6rem; max-width: 62ch; }
+.m-head h2 { font-size: clamp(2.2rem, 3.6vw, 3.2rem); }
+.model-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 1.25rem; align-items: start; }
+.model-card { padding: 1.6rem; display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.2rem; align-content: start; transition: border-color 0.4s, box-shadow 0.6s var(--ease), transform 0.6s var(--ease); }
+.model-card.wide { max-width: none; }
+.model-card:hover { transform: translateY(-4px); }
+.model-card.is-active { border-color: color-mix(in srgb, var(--accent-2) 60%, transparent); box-shadow: var(--shadow-card), 0 0 60px color-mix(in srgb, var(--accent) 20%, transparent); }
+.model-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+.model-top h3 { font-size: 2rem; font-weight: 400; line-height: 1.05; margin-bottom: 0.25rem; }
+.chip.tiny { height: 20px; font-size: 9px; padding: 0 0.5rem; margin-left: 0.6rem; }
+.chip svg { width: 13px; height: 13px; }
+.model-desc { color: var(--text-2); line-height: 1.7; font-size: 15px; }
+.stat-block { display: grid; gap: 1rem; padding: 1.1rem; border-radius: 18px; background: color-mix(in srgb, var(--accent) 6%, transparent); border: 1px solid var(--line); }
+.headline-metric { display: grid; gap: 0.3rem; }
+.headline-metric b { font-size: 3.4rem; font-weight: 400; line-height: 1; color: var(--accent-2); }
+.headline-metric b small { font-size: 1.1rem; color: var(--muted); font-family: var(--font-mono); letter-spacing: 0.02em; }
+.mini-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.6rem; }
+.mini-metrics > div { display: grid; gap: 0.2rem; }
+.mini-metrics .eyebrow { font-size: 9.5px; letter-spacing: 0.16em; }
+.mini-metrics b { font-size: 15px; font-weight: 500; }
+.per-emotion { display: grid; gap: 0.5rem; }
+.metric-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) 46px; gap: 0.7rem; align-items: center; font-size: 13.5px; color: var(--text-2); }
+.metric-track { height: 7px; border-radius: 7px; background: var(--line); overflow: hidden; }
+.metric-track > span { display: block; height: 100%; border-radius: 7px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.metric-row b { text-align: right; color: var(--text); font-weight: 500; font-size: 12px; }
+.pros-cons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2rem; }
+.model-card:not(.wide) .pros-cons { grid-template-columns: 1fr; }
+.bullets { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.55rem; }
+.bullets li { display: grid; grid-template-columns: 18px 1fr; gap: 0.6rem; font-size: 14px; color: var(--text-2); line-height: 1.5; }
+.bullets svg { width: 16px; height: 16px; margin-top: 2px; }
+.bullets.good svg { color: var(--c-joy); }
+.bullets.warn svg { color: var(--c-frustration); }
+.details { margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.details > div { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 1rem; padding: 0.55rem 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.details dt { color: var(--muted); font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; padding-top: 3px; }
+.details dd { margin: 0; color: var(--text-2); overflow-wrap: anywhere; }
+.table-wrap { overflow-x: auto; }
+.compare th, .compare td { white-space: nowrap; padding: 0.8rem 0.9rem; }
+.compare tr.row-active td { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+td.best, .best { color: var(--c-joy) !important; font-weight: 600; }
+.clf-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 1.6rem; padding: 1.1rem; border-radius: 18px; background: color-mix(in srgb, var(--accent) 6%, transparent); border: 1px solid var(--line); }
+.clf-grid > div { display: grid; gap: 0.7rem; align-content: start; }
+.clf-bars { display: grid; gap: 0.5rem; }
+.glossary { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; }
+.gloss { padding: 1.4rem; display: grid; gap: 0.5rem; align-content: start; }
+.gloss h4 { font-family: var(--font-display); font-weight: 400; font-size: 1.6rem; }
+.supported { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.25rem; }
+.data-note { display: grid; grid-template-columns: 22px 1fr; gap: 0.8rem; margin-top: 1.4rem; max-width: 80ch; }
+.data-note svg { width: 18px; height: 18px; color: var(--c-frustration); margin-top: 3px; }
+
+@media (max-width: 1100px) {
+  .flow-step:not(:last-child)::after { display: none; }
+  .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .clf-grid, .pros-cons { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .flow { grid-template-columns: 1fr; }
+  .mini-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .details > div { grid-template-columns: 1fr; gap: 0.2rem; }
+  .metric-row { grid-template-columns: 78px minmax(0, 1fr) 44px; }
+}

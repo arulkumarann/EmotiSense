@@ -11,6 +11,7 @@ import { useToast } from "../hooks/useToasts";
 import { api, ApiError } from "../lib/api";
 import { EMOTION_BY_KEY, EMOTION_KEYS } from "../lib/emotions";
 import { fmtDate, fmtDuration, fmtTime, pct } from "../lib/format";
+import { modelLabel } from "../lib/models";
 import { exportCsv, exportJson, pickMoments } from "../lib/moments";
 import { TREND_LABEL } from "../lib/escalation";
 import { buildCurves } from "../lib/series";
@@ -187,6 +188,7 @@ function SessionView({ session, setSession }: { session: SessionDetail; setSessi
           <div className="meta-row">
             {session.tag && !session.is_sample && <span className="chip">{session.tag}</span>}
             {session.is_sample && <span className="chip badge-sample">Sample</span>}
+            {session.model && <Link to="/app/models" className="chip" title="The timeline model that analyzed this recording">Model · {modelLabel(session.model.kind)}</Link>}
             <span className="muted mono small">{fmtDuration(session.duration)}</span>
             <span className="muted mono small">{fmtDate(session.created)}</span>
             <span className="muted mono small">{session.filename}</span>

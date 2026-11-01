@@ -5,6 +5,8 @@ import { ProgressRing, SessionTile } from "../components/Bits";
 import { EASE, PageTransition } from "../components/Chrome";
 import { IconArrow, IconClose, IconMic, IconRecord, IconStop, IconUpload, IconWave } from "../components/Icons";
 import { useHealth, useSessions } from "../hooks/useData";
+import { useModels } from "../hooks/useModels";
+import { ModelPicker } from "../components/ModelPicker";
 import { useRecorder } from "../hooks/useRecorder";
 import { useToast } from "../hooks/useToasts";
 import { api, watchJob, ApiError } from "../lib/api";
@@ -50,6 +52,7 @@ export default function Analyze() {
   const { health, offline } = useHealth();
   const { sessions } = useSessions();
   const recorder = useRecorder();
+  const models = useModels();
 
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
@@ -113,7 +116,7 @@ export default function Analyze() {
     setFailure(null);
     setJob(null);
     try {
-      const { job_id, session_id } = await api.upload(file, { title: title.trim(), tag: tag.trim() });
+      const { job_id, session_id } = await api.upload(file, { title: title.trim(), tag: tag.trim(), model: models.data?.active ?? "" });
       const finished = await watchJob(job_id, setJob);
       if (finished.status === "error") throw new Error(finished.error ?? "The analysis failed");
       toast("Analysis complete");
@@ -145,6 +148,13 @@ export default function Analyze() {
           <p className="page-sub">Drop in a file or record your voice. A few moments later you'll see how the feeling moved, second by second.</p>
         </div>
       </header>
+
+      {models.data && models.data.timeline.length > 0 && !busy && (
+        <div className="model-bar">
+          <ModelPicker models={models.data.timeline} activeId={models.data.active} onChange={models.choose} label="Model" />
+          <p className="muted small">{models.active?.tagline}. <Link to="/app/models" className="link-arrow">How the models differ →</Link></p>
+        </div>
+      )}
 
       <AnimatePresence>
         {dragging && (

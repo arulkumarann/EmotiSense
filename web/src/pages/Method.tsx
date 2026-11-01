@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { Link } from "react-router-dom";
 import { EASE, PageTransition, Reveal } from "../components/Chrome";
 import { IconFlag } from "../components/Icons";
 
@@ -26,7 +27,7 @@ export default function Method() {
         <div className="page-head-main method-hero">
           <span className="eyebrow">Method</span>
           <h1 className="display page-title">Measured, <em>not marketed.</em></h1>
-          <p className="lead">How EmotiSense turns sound into a timeline, how well that works, and where it falls short. Everything on this page comes from runs we actually made.</p>
+          <p className="lead">How EmotiSense turns sound into a timeline, how well that works, and where it falls short. Everything on this page comes from runs we actually made. <Link to="/app/models" className="link-arrow">Browse every model →</Link></p>
         </div>
       </header>
 

@@ -6,6 +6,7 @@ import "@fontsource/jetbrains-mono/500.css";
 import "./styles/base.css";
 import "./styles/app.css";
 import "./styles/pages.css";
+import "./styles/models.css";
 import "./styles/landing.css";
 
 import { StrictMode } from "react";

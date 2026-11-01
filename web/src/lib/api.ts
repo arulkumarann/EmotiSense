@@ -1,5 +1,5 @@
 import { NATIVE_EXTENSIONS, extensionOf, transcodeToWav } from "./wav";
-import type { EscalationSettings, Health, JobState, Note, SessionCard, SessionDetail } from "./types";
+import type { EscalationSettings, Health, JobState, ModelsResponse, Note, SessionCard, SessionDetail } from "./types";
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) {
@@ -51,9 +51,11 @@ export const api = {
   saveSettings: (values: Partial<EscalationSettings>) =>
     request<{ values: EscalationSettings; defaults: EscalationSettings }>("/settings", json("PUT", values)),
   job: (id: string) => request<JobState>(`/jobs/${id}`),
+  models: () => request<ModelsResponse>("/models"),
+  setActiveModel: (id: string) => request<{ active: string }>("/models/active", json("PUT", { id })),
 
   /** Upload a recording (converted to WAV in the browser if the server can't read its format). */
-  async upload(file: File, meta: { title?: string; tag?: string } = {}): Promise<{ job_id: string; session_id: string }> {
+  async upload(file: File, meta: { title?: string; tag?: string; model?: string } = {}): Promise<{ job_id: string; session_id: string }> {
     let toSend = file;
     if (!NATIVE_EXTENSIONS.includes(extensionOf(file.name))) {
       try {
@@ -66,6 +68,7 @@ export const api = {
     form.append("file", toSend, toSend.name);
     form.append("title", meta.title ?? "");
     form.append("tag", meta.tag ?? "");
+    form.append("model", meta.model ?? "");
     return request("/sessions", { method: "POST", body: form });
   },
 };

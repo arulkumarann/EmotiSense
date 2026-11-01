@@ -10,6 +10,7 @@ const Library = lazy(() => import("./pages/Library"));
 const Insights = lazy(() => import("./pages/Insights"));
 const Live = lazy(() => import("./pages/Live"));
 const Settings = lazy(() => import("./pages/Settings"));
+const Models = lazy(() => import("./pages/Models"));
 const Method = lazy(() => import("./pages/Method"));
 
 function ScrollTop() {
@@ -46,6 +47,7 @@ export default function App() {
             <Route path="library" element={<Library />} />
             <Route path="insights" element={<Insights />} />
             <Route path="live" element={<Live />} />
+            <Route path="models" element={<Models />} />
             <Route path="settings" element={<Settings />} />
             <Route path="method" element={<Method />} />
           </Route>

@@ -55,6 +55,7 @@ export interface SessionDetail {
   alerts: Alert[];
   escalation_config: EscalationSettings;
   notes: Note[];
+  model?: { id: string; kind: string };
   warning?: string;
 }
 
@@ -93,5 +94,50 @@ export interface Health {
   status: string;
   model: "ready" | "loading" | "error" | "absent";
   model_error: string | null;
+  timeline_model?: string | null;
   formats: string[];
+}
+
+export interface ModelStats {
+  ccc?: { mean: number; std: number };
+  rmse?: number;
+  mae?: number;
+  alert_f1?: number;
+  trend_accuracy?: number;
+  per_emotion_ccc?: Record<EmotionKey, number>;
+  folds?: { name: string; wa: number; ua: number }[];
+  mean?: { wa: number; ua: number };
+  std?: { wa: number; ua: number };
+  recipe_comparison?: { label: string; baseline: { wa: number; ua: number }; improved: { wa: number; ua: number } };
+}
+
+export interface ModelCard {
+  id: string;
+  name: string;
+  role: "timeline" | "encoder" | "classifier";
+  kind: string;
+  tagline: string;
+  description: string;
+  strengths: string[];
+  limits: string[];
+  stats: ModelStats | null;
+  selectable: boolean;
+  available: boolean;
+  active: boolean;
+  file?: string;
+  size_mb?: number;
+  params?: number;
+  params_m?: number;
+  details: [string, string][];
+  files?: { file: string; fold: number | null; size_mb: number }[];
+}
+
+export interface ModelsResponse {
+  active: string | null;
+  timeline: ModelCard[];
+  encoder: ModelCard;
+  classifier: ModelCard;
+  glossary: { term: string; plain: string }[];
+  supported: { name: string; note: string }[];
+  data_note: string;
 }

@@ -99,6 +99,11 @@ Keep `timeline_deploy.pt` (BiLSTM, about 12 MB) in `models/`, then double-click 
   are converted in the browser automatically).
 - **Session view:** a glowing playhead glides over smooth emotion curves, a colour ribbon and the waveform while the
   audio plays. Click or drag to jump, hover for exact values, add notes with `N`, export a report, CSV or JSON.
+- **Models:** a dropdown on the Analyze page chooses which timeline model reads your recording (BiLSTM, Transformer or
+  the no-context baseline; the choice is remembered), and the Models page explains each one in plain language with its
+  measured results, a side-by-side comparison, the encoder, the reference classifier and a glossary. Every `.pt`
+  timeline checkpoint in `models/` appears automatically; each session records which model produced it. Point
+  `--ser-dir` (or `EMOTISENSE_SER_DIR`) at your fine-tuned classifier weights to show them as found on this computer.
 - **Library, Insights, Live replay, Settings, Method:** search sessions, see the overall mix and tension trends,
   replay several sessions side by side (clearly labelled as a simulation), tune alert sensitivity with a live preview,
   and read the measured results. Dark and light themes.
@@ -109,7 +114,7 @@ make web-dev        # UI hot-reload on :5173 (run `make web` in another terminal
 make web-test       # UI type-check and unit tests
 ```
 
-The app embeds audio with the *frozen* pretrained WavLM-Large and scores it with the BiLSTM; it does not use the
+The app embeds audio with the *frozen* pretrained WavLM-Large and scores it with the selected timeline model; it does not use the
 fine-tuned classifier checkpoints (`best.pt`). Scores are indicative, not calibrated intensities, and speakers are not
 separated. Sample audio comes from IEMOCAP, whose licence forbids redistribution, so `data/samples/` is git-ignored.
 

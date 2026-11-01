@@ -2,13 +2,14 @@ import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import { NavLink, useLocation, useOutlet } from "react-router-dom";
 import { useHealth } from "../hooks/useData";
 import { Atmosphere, Logo, ThemeToggle } from "./Chrome";
-import { IconBook, IconChart, IconLibrary, IconLive, IconLock, IconSliders, IconWave } from "./Icons";
+import { IconBook, IconChart, IconLibrary, IconLive, IconLock, IconSliders, IconSpark, IconWave } from "./Icons";
 
 const NAV = [
   { to: "/app", label: "Analyze", icon: IconWave, end: true },
   { to: "/app/library", label: "Library", icon: IconLibrary },
   { to: "/app/insights", label: "Insights", icon: IconChart },
   { to: "/app/live", label: "Live replay", icon: IconLive },
+  { to: "/app/models", label: "Models", icon: IconSpark },
   { to: "/app/settings", label: "Settings", icon: IconSliders },
   { to: "/app/method", label: "Method", icon: IconBook },
 ];

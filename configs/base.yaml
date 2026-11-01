@@ -49,6 +49,7 @@ augment:
 train:
   epochs: 30
   batch_size: 16
+  bucket_by_length: true           # batch similar-length clips together (less padding, ~1.5-2x faster)
   eval_batch_size: 16
   accum_steps: 1
   num_workers: 4

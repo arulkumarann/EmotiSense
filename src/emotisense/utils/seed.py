@@ -18,4 +18,5 @@ def seed_everything(seed: int, deterministic: bool = False) -> None:
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
     else:
-        torch.backends.cudnn.benchmark = True
+        # Autotuning re-runs for every new input length, which is slower for variable-length audio.
+        torch.backends.cudnn.benchmark = False

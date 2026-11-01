@@ -15,6 +15,7 @@ from ..config import Config, save_config
 from ..data.datasets import Collator, SERDataset
 from ..data.labels import get_scheme
 from ..data.manifest import load_manifest, resolve_audio_root, resolve_paths
+from ..data.sampler import BucketBatchSampler
 from ..data.splits import split_fold
 from ..evaluation.metrics import classification_metrics
 from ..losses import MultiLoss
@@ -63,9 +64,16 @@ def build_loaders(cfg: Config, splits: dict[str, pd.DataFrame]):
     def by_length(ds: SERDataset) -> list[int]:
         # Similar lengths per eval batch = minimal padding (matters for group-norm base models).
         return sorted(range(len(ds)), key=lambda i: ds.df.at[i, "duration"])
+    drop_last = len(sets["train"]) > t.batch_size
+    if t.get("bucket_by_length", True):      # similar-length batches: roughly halves the padding waste
+        lengths = sets["train"].df["duration"].clip(upper=d.train_max_seconds).to_numpy()
+        train_loader = DataLoader(sets["train"], collate_fn=train_collate, batch_sampler=BucketBatchSampler(
+            lengths, t.batch_size, drop_last=drop_last, seed=cfg.seed), **kwargs)
+    else:
+        train_loader = DataLoader(sets["train"], batch_size=t.batch_size, shuffle=True, drop_last=drop_last,
+                                  collate_fn=train_collate, **kwargs)
     loaders = {
-        "train": DataLoader(sets["train"], batch_size=t.batch_size, shuffle=True, drop_last=len(sets["train"]) > t.batch_size,
-                            collate_fn=train_collate, **kwargs),
+        "train": train_loader,
         "val": DataLoader(sets["val"], batch_size=t.eval_batch_size, sampler=by_length(sets["val"]),
                           collate_fn=eval_collate, **kwargs),
         "test": DataLoader(sets["test"], batch_size=t.eval_batch_size, sampler=by_length(sets["test"]),

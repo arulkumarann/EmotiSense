@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -170,7 +171,20 @@ def _register_extra_commands(sub) -> None:
     cli_extra.register(sub)
 
 
+def limit_threads(cap: int = 8) -> None:
+    """Cap math-library threads unless the user set them.
+
+    Containers often report the host's core count (e.g. 255) while only allowing a handful, and the resulting
+    thread oversubscription stalled embedding extraction (33 min instead of ~3) and timeline training (10x
+    slower) on a rented GPU. Must run before torch / numpy are imported.
+    """
+    n = str(max(1, min(cap, os.cpu_count() or cap)))
+    for var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
+        os.environ.setdefault(var, n)
+
+
 def main(argv: list[str] | None = None) -> int:
+    limit_threads()
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)

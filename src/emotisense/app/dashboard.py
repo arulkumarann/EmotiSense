@@ -13,6 +13,9 @@ from emotisense.app.plots import agent_figure, format_time, moments_to_review, t
 from emotisense.app.store import CallStore
 
 
+DEFAULT_CHECKPOINT = "models/timeline_bilstm_deploy.pt"
+
+
 @st.cache_resource(show_spinner="Loading models...")
 def load_analyzer(timeline_ckpt: str, ser_ckpt: str):
     from emotisense.app.analyzer import CallAnalyzer
@@ -52,7 +55,9 @@ def show_result(result: dict) -> None:
 
 def analyze_page(store: CallStore) -> None:
     st.header("Analyze a call")
-    timeline = st.sidebar.text_input("Timeline checkpoint", os.environ.get("EMOTISENSE_TIMELINE_CKPT", ""))
+    default_ckpt = os.environ.get("EMOTISENSE_TIMELINE_CKPT") or (
+        DEFAULT_CHECKPOINT if Path(DEFAULT_CHECKPOINT).exists() else "")
+    timeline = st.sidebar.text_input("Timeline checkpoint", default_ckpt)
     ser = st.sidebar.text_input("SER checkpoint (optional)", os.environ.get("EMOTISENSE_SER_CKPT", ""))
     tab_audio, tab_json = st.tabs(["Upload audio", "Open saved result"])
     with tab_audio:

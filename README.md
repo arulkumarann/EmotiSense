@@ -88,6 +88,17 @@ WavLM-Large needs about 2.2 PFLOP per epoch on this data. Rough wall-clock for t
 about 1.5 h. These are estimates, not measurements: after the first fold of the first run, multiply that fold's time
 by the remaining folds to see where you really are.
 
+### Using the trained dashboard on your own PC
+
+After a training run, keep `timeline_deploy.pt` (BiLSTM, about 12 MB) in `models/`, then double-click `run_dashboard.bat`
+(Windows) or run `./run_dashboard.sh`. Your browser opens at http://localhost:8501: upload a `.wav` / `.flac` / `.ogg`
+call and the page plots anger, frustration, satisfaction, sadness and calm over time, marks escalation alerts and lists
+the moments to review. Any CPU works (about 40 s for a 2-minute call; the first run downloads WavLM-Large, 1.2 GB).
+
+The dashboard embeds audio with the *frozen* pretrained WavLM-Large and scores it with the BiLSTM; it does not use the
+fine-tuned classifier checkpoints (`best.pt`). Scores are indicative, not calibrated intensities, and agent and
+customer speech are not separated.
+
 ### Timeline, ensembling, serving
 
 ```bash

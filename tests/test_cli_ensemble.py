@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -87,3 +88,16 @@ def test_prepare_reports_missing_data_without_traceback(tmp_path, monkeypatch, c
     monkeypatch.chdir(tmp_path)
     assert main(["prepare", "iemocap"]) == 1
     assert "emotisense download iemocap" in capsys.readouterr().err
+
+
+def test_limit_threads_caps_but_respects_user_settings(monkeypatch):
+    from emotisense.cli import limit_threads
+
+    for var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setattr("os.cpu_count", lambda: 255)          # what a container reports
+    limit_threads()
+    assert {os.environ[v] for v in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS")} == {"8"}
+    monkeypatch.setenv("OMP_NUM_THREADS", "3")
+    limit_threads()
+    assert os.environ["OMP_NUM_THREADS"] == "3"               # an explicit choice is never overridden
